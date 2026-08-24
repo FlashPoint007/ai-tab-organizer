@@ -204,12 +204,12 @@
 - [ ] CI：GitHub Actions 跑 lint + test + build
 - 验收：浏览器加载扩展，side panel 显示 Hello；pnpm compile && pnpm test 全绿
 
-### M1 标签管理基座（对标 VertiTab 基础能力）（1–2 天）
-- [ ] TabEventHub + TabRegistry（持久缓存、去抖、SW 休眠恢复）
-- [ ] Side Panel：垂直列表、实时增删改、搜索过滤、批量多选、关闭/固定/静音
-- [ ] 域名分组 + 排序（借鉴 VertiTab 思路，代码自写）
-- [ ] 一键清理（关非活跃/重复 URL）+ 快照/恢复
-- 验收：20+ 标签实测增删移动同步无错乱；清理后可从快照恢复
+### M1 标签管理基座（对标 VertiTab 基础能力）（1–2 天）✅ 已完成
+- [x] TabEventHub + TabRegistry（session 持久化、去抖广播、SW 休眠后对账恢复）
+- [x] Side Panel：垂直列表、实时增删改、搜索过滤、批量多选、关闭/固定/静音
+- [x] 域名分组 + 排序（借鉴 VertiTab 思路，代码自写）
+- [x] 一键清理（关非活跃/重复 URL）+ 快照/恢复
+- 验收：自动化部分全绿（lint/compile/32 单测/build）；**待人工**：浏览器加载 dist 后按附录 A 的实测清单验证
 
 ### M2 规则引擎（0.5–1 天）
 - [ ] DomainRule：域名/关键词 → 类别映射 + UI 编辑器
@@ -279,3 +279,16 @@
   2. 扩展代码统一用 `import { browser } from 'wxt/browser'` 的类型安全 API 替代裸 chrome.* 全局（pnpm 严格布局下全局类型链路不稳，且 browser 命名空间利于 Firefox 适配）
 - 验证结果：`pnpm compile`（tsc --noEmit）✓ · `pnpm test` 9/9 ✓ · `pnpm build` chrome-mv3 共 203.6 KB ✓
 - 产物结构：background.ts / sidepanel(React) / options(React)，manifest 由 WXT 按约定式入口自动生成
+
+### M1（已完成）
+- 架构落地：
+  - 消息协议 `src/lib/messaging/protocol.ts`（zod 校验，Request×16 + Event 广播 + Result 信封，客户端可用 `RequestInput` 省略默认值字段）
+  - 存储抽象 KVStorage（local/session/Memory 三实现，业务可注入便于单测）
+  - TabRegistry：内存 Map + chrome.storage.session 防抖持久化；SW 冷启动先热身再与实时查询对账
+  - EventHub：tabs.on*/tabGroups.on* → 注册表增量更新 → 120ms 合并广播；移动/跨窗/分组变化走「整窗实时对账」
+  - SnapshotService：上限 10 份 FIFO；恢复前按归一化 URL 去重跳过
+- Side Panel：搜索过滤 / 列表·域名双视图（域名视图复用纯函数 computeDomainGroups）/ 多选批量（关闭·固定·静音·建组）/ 清理重复与非活跃的两步确认（按钮上预显候选数）/ 快照弹窗（创建·恢复·删除）
+- 质量基线：ESLint（typescript-eslint recommended + react-hooks + consistent-type-imports）0 错 0 警；CI 增加 lint 步骤
+- 版本调整：TypeScript 固定 ~6.0.3 —— typescript-eslint 8.67 尚不支持 TS 7（升级路径见 typescript-eslint#10940）
+- 兼容性备忘：chrome.tabs.group/updateGroup/ungroup 在类型上是回调式签名，已在 groupsWrap 用类型化 shim 固化为 Promise 形态
+- **待人工验收清单**：① 加载 .output/chrome-mv3 ② 开 20+ 标签：新增/关闭/切换/固定/静音实时同步 ③ 按域名分组→排序→再开新标签不串组 ④ 清理重复→快照恢复→已打开页被跳过 ⑤ SW 手动停止(service worker 面板)后操作仍正常（注册表对账生效）
