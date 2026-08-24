@@ -264,5 +264,18 @@
 - 提交前检查：pnpm lint && pnpm test && pnpm compile 全绿
 
 ## 10. 下一步行动（按序）
-1. 你确认本计划（或提出修改：产品名/技术栈/里程碑范围均可调整）
-2. 我执行 M0：脚手架 + CI + push 到 GitHub
+1. ~~你确认本计划~~ 已确认，仓库已创建并推送
+2. ~~我执行 M0~~ 已完成，见附录 A
+3. 开始 M1 标签管理基座
+
+---
+
+## 附录 A：实施日志
+
+### M0（已完成）
+- 锁定版本：wxt 0.21.4 / @wxt-dev/module-react 1.2.2 / React 19.2.8 / TypeScript 7.0.2 / Tailwind 4.3.3 / Vitest 4.1.11 / pnpm 11.10.0
+- 与计划的差异：
+  1. ESLint 从 M0 推迟到 M1 —— 先保证 compile/test/build 三绿基线，lint 规则集随首个业务代码一起定稿
+  2. 扩展代码统一用 `import { browser } from 'wxt/browser'` 的类型安全 API 替代裸 chrome.* 全局（pnpm 严格布局下全局类型链路不稳，且 browser 命名空间利于 Firefox 适配）
+- 验证结果：`pnpm compile`（tsc --noEmit）✓ · `pnpm test` 9/9 ✓ · `pnpm build` chrome-mv3 共 203.6 KB ✓
+- 产物结构：background.ts / sidepanel(React) / options(React)，manifest 由 WXT 按约定式入口自动生成
