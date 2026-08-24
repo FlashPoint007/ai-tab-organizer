@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { browser } from 'wxt/browser';
 
 import { sendRequest } from '@/lib/messaging/client';
+import type { LlmConfigPayload, LlmUsageStats } from '@/lib/messaging/protocol';
 import type { DomainRule } from '@/lib/settings/types';
+import { findPreset, LLM_PRESETS, originFromBaseUrl } from '@/lib/llm/presets';
 
 type RuleMatchType = DomainRule['matchType'];
 
@@ -9,6 +12,14 @@ const btn =
   'rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-1 text-xs text-neutral-300 transition hover:border-neutral-600 hover:text-white disabled:opacity-40 disabled:hover:border-neutral-800 disabled:hover:text-neutral-300';
 const input =
   'rounded-md border border-neutral-800 bg-neutral-950 px-2.5 py-1.5 text-sm outline-none placeholder:text-neutral-600 focus:border-emerald-700';
+
+interface LlmFormState {
+  preset: string;
+  baseUrl: string;
+  model: string;
+  apiKey: string;
+  temperature: string;
+}
 
 export default function App() {
   const [rules, setRules] = useState<DomainRule[] | null>(null);
@@ -21,6 +32,13 @@ export default function App() {
   });
   const [error, setError] = useState<string | null>(null);
 
+  // M3：AI 模型配置
+  const [llm, setLlm] = useState<LlmFormState | null>(null);
+  const [usage, setUsage] = useState<LlmUsageStats | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+
   const fail = useCallback((e: unknown) => {
     setError(e instanceof Error ? e.message : String(e));
   }, []);
@@ -28,12 +46,26 @@ export default function App() {
   useEffect(() => {
     void (async () => {
       try {
-        const [r, c] = await Promise.all([
+        const [r, c, u, cfg] = await Promise.all([
           sendRequest<DomainRule[]>({ type: 'listRules' }),
           sendRequest<string[]>({ type: 'listCategories' }),
+          sendRequest<LlmUsageStats>({ type: 'getLlmUsage' }),
+          sendRequest<LlmConfigPayload | null>({ type: 'getLlmConfig' }),
         ]);
         setRules(r);
         setCategories(c);
+        setUsage(u);
+        setLlm(
+          cfg
+            ? {
+                preset: cfg.preset,
+                baseUrl: cfg.baseUrl,
+                model: cfg.model,
+                apiKey: cfg.apiKey ?? '',
+                temperature: cfg.temperature !== undefined ? String(cfg.temperature) : '',
+              }
+            : { preset: 'deepseek', baseUrl: '', model: '', apiKey: '', temperature: '' },
+        );
       } catch (e) {
         fail(e);
       }
@@ -86,7 +118,7 @@ export default function App() {
   function removeCategory(name: string): void {
     const used = usageCount.get(name) ?? 0;
     if (used > 0) {
-      setError(`「${name}」被 ${used} 条规则引用，请先修改或删除这些规则`);
+      setError('「' + name + '」被 ' + used + ' 条规则引用，请先修改或删除这些规则');
       return;
     }
     void saveCategories((categories ?? []).filter((c) => c !== name));
@@ -123,11 +155,109 @@ export default function App() {
     void saveRules(next);
   }
 
+  // ---------- AI 模型配置 ----------
+  async function ensureOriginPermission(baseUrl: string): Promise<boolean> {
+    const origin = originFromBaseUrl(baseUrl);
+    if (!origin) {
+      setError('baseUrl 必须是合法的 http(s) 地址');
+      return false;
+    }
+    const already = await browser.permissions.contains({ origins: [origin] });
+    if (already) return true;
+    // 必须在用户手势里调用（按钮回调内），浏览器会弹出授权确认
+    return browser.permissions.request({ origins: [origin] });
+  }
+
+  function buildPayload(): LlmConfigPayload | null {
+    if (!llm) return null;
+    const baseUrl = llm.baseUrl.trim();
+    const model = llm.model.trim();
+    if (!baseUrl || !model) {
+      setError('baseUrl 和模型名都不能为空');
+      return null;
+    }
+    try {
+      const u = new URL(baseUrl);
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('bad protocol');
+    } catch {
+      setError('baseUrl 必须是合法的 http(s) 地址');
+      return null;
+    }
+    const tempRaw = llm.temperature.trim();
+    return {
+      preset: llm.preset,
+      baseUrl,
+      model,
+      ...(llm.apiKey.trim() ? { apiKey: llm.apiKey.trim() } : {}),
+      ...(tempRaw ? { temperature: Number(tempRaw) } : {}),
+    };
+  }
+
+  async function handleSaveLlm(): Promise<void> {
+    const payload = buildPayload();
+    if (!payload) return;
+    if (!(await ensureOriginPermission(payload.baseUrl))) {
+      if (!error) setError('未授予该域名的访问权限，插件将无法调用该服务');
+      return;
+    }
+    try {
+      await sendRequest({ type: 'saveLlmConfig', config: payload });
+      setSavedAt(new Date().toLocaleTimeString('zh-CN', { hour12: false }));
+      setError(null);
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  async function handleTestLlm(): Promise<void> {
+    const payload = buildPayload();
+    if (!payload) return;
+    if (!(await ensureOriginPermission(payload.baseUrl))) {
+      setTestResult({ ok: false, text: '未授予该域名的访问权限' });
+      return;
+    }
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const r = await sendRequest<{ ok: boolean; latencyMs: number; error?: string }>({
+        type: 'testLlmConnection',
+        config: payload,
+      });
+      setTestResult(
+        r.ok
+          ? { ok: true, text: '连接成功，耗时 ' + r.latencyMs + 'ms' }
+          : { ok: false, text: r.error ?? '连接失败' },
+      );
+    } catch (e) {
+      setTestResult({ ok: false, text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  function applyPreset(presetId: string): void {
+    const preset = findPreset(presetId);
+    setLlm((prev) =>
+      prev
+        ? {
+            ...prev,
+            preset: presetId,
+            baseUrl: preset?.baseUrl ?? prev.baseUrl,
+            model: preset?.defaultModel ?? '',
+          }
+        : prev,
+    );
+    setTestResult(null);
+  }
+
+  const activePreset = findPreset(llm?.preset ?? '');
+  const showApiKey = activePreset?.needsApiKey ?? true;
+
   return (
     <main className="mx-auto min-h-screen max-w-2xl bg-neutral-950 p-6 pb-16 text-neutral-100">
       <h1 className="text-xl font-semibold tracking-tight">AI Tab Organizer · 设置</h1>
       <p className="mt-1 text-sm text-neutral-400">
-        规则引擎（M2）：本地匹配、离线可用；LLM 自动分类将在 M3 接入。
+        M3：AI 自动分类已接入。规则引擎（M2）继续作为离线兜底。
       </p>
 
       {error && (
@@ -139,16 +269,129 @@ export default function App() {
         </div>
       )}
 
-      {/* 分类管理 */}
+      {/* AI 模型配置 */}
       <section className="mt-6">
+        <h2 className="text-base font-semibold">AI 模型</h2>
+        <p className="mt-1 text-xs leading-relaxed text-neutral-500">
+          任意 OpenAI 兼容端点均可（含本机 Ollama / LM Studio）。保存时会按域名请求访问授权，
+          API Key 只保存在本地浏览器中，不会上传。
+        </p>
+
+        <div className="mt-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <label className="w-20 shrink-0 text-xs text-neutral-500">服务商</label>
+            <select
+              value={llm?.preset ?? 'deepseek'}
+              onChange={(e) => applyPreset(e.target.value)}
+              className={input + ' w-52'}
+            >
+              {LLM_PRESETS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="w-20 shrink-0 text-xs text-neutral-500">Base URL</label>
+            <input
+              value={llm?.baseUrl ?? ''}
+              onChange={(e) => setLlm((prev) => (prev ? { ...prev, baseUrl: e.target.value } : prev))}
+              placeholder="https://api.deepseek.com/v1"
+              className={input + ' min-w-0 flex-1'}
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="w-20 shrink-0 text-xs text-neutral-500">模型</label>
+            <input
+              value={llm?.model ?? ''}
+              onChange={(e) => setLlm((prev) => (prev ? { ...prev, model: e.target.value } : prev))}
+              placeholder="deepseek-chat"
+              className={input + ' min-w-0 flex-1'}
+            />
+            {!showApiKey && <span className="shrink-0 text-[11px] text-neutral-600">本地服务无需 Key</span>}
+          </div>
+
+          {showApiKey && (
+            <div className="flex items-center gap-2">
+              <label className="w-20 shrink-0 text-xs text-neutral-500">API Key</label>
+              <input
+                type="password"
+                value={llm?.apiKey ?? ''}
+                onChange={(e) => setLlm((prev) => (prev ? { ...prev, apiKey: e.target.value } : prev))}
+                placeholder="sk-…（仅存本地）"
+                className={input + ' min-w-0 flex-1'}
+              />
+              <input
+                value={llm?.temperature ?? ''}
+                onChange={(e) => setLlm((prev) => (prev ? { ...prev, temperature: e.target.value } : prev))}
+                placeholder="温度 0"
+                className={input + ' w-24'}
+              />
+            </div>
+          )}
+
+          {activePreset?.hint && <p className="pl-[5.5rem] text-[11px] text-neutral-500">💡 {activePreset.hint}</p>}
+
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              type="button"
+              className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-600"
+              onClick={() => void handleSaveLlm()}
+            >
+              授权并保存
+            </button>
+            <button type="button" className={btn} disabled={testing} onClick={() => void handleTestLlm()}>
+              {testing ? '测试中…' : '测试连接'}
+            </button>
+            {testResult && (
+              <span className={'text-xs ' + (testResult.ok ? 'text-emerald-400' : 'text-red-400')}>
+                {testResult.text}
+              </span>
+            )}
+            {!testResult && savedAt && <span className="text-xs text-emerald-400">已保存于 {savedAt}</span>}
+          </div>
+
+          {usage && (
+            <p className="pt-1 text-[11px] text-neutral-500">
+              用量统计：请求 {usage.requests} 次 · 累计 {usage.totalTokens} tokens · 降级批次{' '}
+              {usage.degradedBatches}
+              <button
+                type="button"
+                className="ml-2 underline decoration-dotted hover:text-neutral-300"
+                onClick={() => {
+                  void (async () => {
+                    try {
+                      await sendRequest({ type: 'clearLlmUsage' });
+                      setUsage({ requests: 0, totalTokens: 0, degradedBatches: 0 });
+                    } catch (e) {
+                      fail(e);
+                    }
+                  })();
+                }}
+              >
+                清零
+              </button>
+            </p>
+          )}
+        </div>
+      </section>
+
+      {/* 分类管理 */}
+      <section className="mt-8">
         <h2 className="text-base font-semibold">分类管理</h2>
+        <p className="mt-1 text-xs text-neutral-500">
+          这份类别清单同时约束规则引擎与 AI 分类输出；AI 对没把握的标签会跳过并回落到规则。
+        </p>
         <div className="mt-2 flex flex-wrap gap-1.5">
           {(categories ?? []).map((name) => {
             const used = usageCount.get(name) ?? 0;
             return (
               <span
                 key={name}
-                title={used > 0 ? `被 ${used} 条规则引用，不能删除` : '点击 × 删除'}
+                title={used > 0 ? '被 ' + used + ' 条规则引用，不能删除' : '点击 × 删除'}
                 className="flex items-center gap-1 rounded-full border border-neutral-700 bg-neutral-900 py-1 pl-3 pr-1.5 text-xs"
               >
                 {name}
@@ -187,7 +430,7 @@ export default function App() {
         <p className="mt-1 text-xs leading-relaxed text-neutral-500">
           从上到下依次匹配，先命中先生效（可用 ↑↓ 调整优先级）。
           域名规则匹配主域及其全部子域；关键词规则匹配标题或网址的子串。
-          「按类别分组」时使用这里的规则。
+          「按类别分组」与 AI 整理的兜底都使用这里的规则。
         </p>
 
         <ul className="mt-3 space-y-2">

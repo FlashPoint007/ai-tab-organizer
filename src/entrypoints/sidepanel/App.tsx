@@ -172,6 +172,35 @@ export default function App() {
     showStatus(`已按类别分成 ${r.groups} 组（${r.groupedTabs} 个标签${extra}）`);
   });
 
+  const [organizing, setOrganizing] = useState(false);
+  const organizeByLlm = (): void => {
+    if (organizing) return;
+    setOrganizing(true);
+    void run(async () => {
+      try {
+        const r = await sendRequest<{
+          groups: number;
+          groupedTabs: number;
+          cacheHits: number;
+          ruleFallback: number;
+          batchesFailed: number;
+          totalTokens: number;
+        }>({ type: 'organizeByLlm' });
+
+        const parts = [
+          `AI 已归类 ${r.groupedTabs} 个标签为 ${r.groups} 组`,
+          r.cacheHits > 0 ? `缓存命中 ${r.cacheHits}` : '',
+          r.totalTokens > 0 ? `消耗 ${r.totalTokens} tokens` : '',
+          r.ruleFallback > 0 ? `规则兜底 ${r.ruleFallback}` : '',
+          r.batchesFailed > 0 ? `${r.batchesFailed} 批请求失败已自动降级` : '',
+        ].filter(Boolean);
+        showStatus(parts.join('，'));
+      } finally {
+        setOrganizing(false);
+      }
+    });
+  };
+
   const executeCleanup = () => {
     if (!pendingCleanup) return;
     const { kind, tabIds } = pendingCleanup;
@@ -229,6 +258,14 @@ export default function App() {
           className="mt-2 w-full rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-1.5 text-sm outline-none placeholder:text-neutral-600 focus:border-emerald-700"
         />
         <div className="mt-2 flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            disabled={organizing}
+            onClick={organizeByLlm}
+            className="rounded-md bg-emerald-700 px-3 py-1 text-xs font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-50"
+          >
+            {organizing ? 'AI 整理中…' : '✨ AI 整理'}
+          </button>
           <button type="button" className={toolbarBtn} onClick={groupByDomain}>按域名分组</button>
           <button type="button" className={toolbarBtn} onClick={groupByRules}>按类别分组</button>
           <button type="button" className={toolbarBtn} onClick={sortByDomain}>域名排序</button>

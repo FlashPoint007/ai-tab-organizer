@@ -17,6 +17,8 @@ describe('settingsStore', () => {
       rules: [{ id: 'r1', matchType: 'domain', pattern: 'github.com', category: '开发工具', enabled: true }],
       categories: ['开发工具'],
       minGroupSizeForRules: 2,
+      llm: null,
+      llmBatch: { size: 10, concurrency: 1, timeoutMs: 5000 },
     };
     await saveSettings(settings, kv);
     expect(await loadSettings(kv)).toEqual(settings);

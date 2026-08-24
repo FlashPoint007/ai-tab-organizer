@@ -40,6 +40,49 @@ export const domainRuleSchema = z.object({
   enabled: z.boolean(),
 });
 
+const urlLike = z
+  .string()
+  .min(1)
+  .max(200)
+  .refine((v) => {
+    try {
+      const u = new URL(v);
+      return u.protocol === 'http:' || u.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }, '必须是 http(s) 地址');
+
+export const llmConfigSchema = z.object({
+  preset: z.string().min(1).max(30),
+  baseUrl: urlLike,
+  model: z.string().min(1).max(80),
+  apiKey: z.string().max(200).optional(),
+  temperature: z.number().min(0).max(2).optional(),
+  maxOutputTokens: z.number().int().positive().max(100_000).optional(),
+});
+
+export type LlmConfigPayload = z.infer<typeof llmConfigSchema>;
+
+export interface OrganizeSummary {
+  groups: number;
+  groupedTabs: number;
+  llmAssigned: number;
+  cacheHits: number;
+  ruleFallback: number;
+  skippedInternal: number;
+  batchesFailed: number;
+  requests: number;
+  totalTokens: number;
+}
+
+export interface LlmUsageStats {
+  requests: number;
+  totalTokens: number;
+  degradedBatches: number;
+  lastRunAt?: number;
+}
+
 export const requestSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('getSnapshot') }),
   z.object({ type: z.literal('activateTab'), tabId: z.number().int() }),
@@ -72,6 +115,12 @@ export const requestSchema = z.discriminatedUnion('type', [
     type: z.literal('saveCategories'),
     categories: z.array(z.string().min(1).max(30)).max(100),
   }),
+  z.object({ type: z.literal('organizeByLlm') }),
+  z.object({ type: z.literal('testLlmConnection'), config: llmConfigSchema }),
+  z.object({ type: z.literal('saveLlmConfig'), config: llmConfigSchema }),
+  z.object({ type: z.literal('getLlmConfig') }),
+  z.object({ type: z.literal('getLlmUsage') }),
+  z.object({ type: z.literal('clearLlmUsage') }),
 ]);
 
 export type Request = z.infer<typeof requestSchema>;
@@ -99,6 +148,12 @@ export type RequestPayloadMap = {
   saveRules: null;
   listCategories: string[];
   saveCategories: null;
+  organizeByLlm: OrganizeSummary;
+  testLlmConnection: { ok: boolean; latencyMs: number; error?: string };
+  saveLlmConfig: null;
+  getLlmConfig: LlmConfigPayload | null;
+  getLlmUsage: LlmUsageStats;
+  clearLlmUsage: null;
 };
 
 // ---------- Background -> Pages ----------

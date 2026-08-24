@@ -17,6 +17,13 @@ import {
 import { getAllTabsMeta, getWindowTabsMeta } from '../browser/tabsWrap';
 import { applyRules, colorForCategory, computeCategoryGroups } from '../organizer/rules';
 import { loadSettings, saveSettings } from '../settings/settingsStore';
+import {
+  clearLlmUsage,
+  describeLlmError,
+  getLlmUsage,
+  organizeTabsByLlm,
+} from './organizeService';
+import { createLlmClient } from '../llm/client';
 import { localKV } from '../storage/browserKv';
 import { err, ok } from '../types';
 import type { Result } from '../types';
@@ -230,6 +237,55 @@ async function dispatch(req: Request): Promise<unknown> {
       await saveSettings({ ...settings, categories: req.categories }, localKV);
       return null;
     }
+
+    case 'organizeByLlm': {
+      const windowId = await lastFocusedWindowId();
+      try {
+        return await organizeTabsByLlm(windowId);
+      } catch (e) {
+        // 统一转成可读文案；cause 保留原始错误便于排查
+        throw new Error(describeLlmError(e), { cause: e });
+      }
+    }
+
+    case 'testLlmConnection': {
+      const client = createLlmClient(req.config);
+      return client.testConnection();
+    }
+
+    case 'saveLlmConfig': {
+      const settings = await loadSettings(localKV);
+      await saveSettings(
+        {
+          ...settings,
+          llm: {
+            preset: req.config.preset,
+            baseUrl: req.config.baseUrl,
+            model: req.config.model,
+            ...(req.config.apiKey ? { apiKey: req.config.apiKey } : {}),
+            ...(req.config.temperature !== undefined ? { temperature: req.config.temperature } : {}),
+            ...(req.config.maxOutputTokens !== undefined
+              ? { maxOutputTokens: req.config.maxOutputTokens }
+              : {}),
+          },
+        },
+        localKV,
+      );
+      return null;
+    }
+
+    case 'getLlmUsage':
+      return getLlmUsage(localKV);
+
+    case 'getLlmConfig': {
+      // 返回协议形态（不含未设置的可选字段）
+      const settings = await loadSettings(localKV);
+      return settings.llm;
+    }
+
+    case 'clearLlmUsage':
+      await clearLlmUsage(localKV);
+      return null;
 
     case 'restoreSnapshot': {
       const snapshot = await getSnapshot(req.id);

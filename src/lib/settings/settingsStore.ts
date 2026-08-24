@@ -27,6 +27,16 @@ export async function loadSettings(kv: KVStorage): Promise<Settings> {
       typeof stored.minGroupSizeForRules === 'number' && stored.minGroupSizeForRules >= 1
         ? stored.minGroupSizeForRules
         : DEFAULT_SETTINGS.minGroupSizeForRules,
+    llm: stored.llm && typeof stored.llm.baseUrl === 'string' && typeof stored.llm.model === 'string'
+      ? stored.llm
+      : DEFAULT_SETTINGS.llm,
+    llmBatch:
+      stored.llmBatch &&
+      typeof stored.llmBatch.size === 'number' &&
+      typeof stored.llmBatch.concurrency === 'number' &&
+      typeof stored.llmBatch.timeoutMs === 'number'
+        ? stored.llmBatch
+        : { ...DEFAULT_SETTINGS.llmBatch },
   };
 }
 
