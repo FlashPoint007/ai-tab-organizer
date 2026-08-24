@@ -211,10 +211,10 @@
 - [x] 一键清理（关非活跃/重复 URL）+ 快照/恢复
 - 验收：自动化部分全绿（lint/compile/32 单测/build）；**待人工**：浏览器加载 dist 后按附录 A 的实测清单验证
 
-### M2 规则引擎（0.5–1 天）
-- [ ] DomainRule：域名/关键词 → 类别映射 + UI 编辑器
-- [ ] URL 归一化缓存层（sha1 + TTL）
-- 验收：单测覆盖规则匹配矩阵；断网状态下分组仍工作
+### M2 规则引擎（0.5–1 天）✅ 已完成
+- [x] DomainRule：域名/关键词 → 类别映射 + UI 编辑器（Options 页，支持优先级排序/启停/分类管理）
+- [x] URL 归一化缓存层（sha1 + TTL，M3 LLM 结果将写入）
+- 验收：规则匹配矩阵单测全覆盖；分组为纯本地计算，断网天然可用
 
 ### M3 LLM 分类核心（2–3 天）★ 最关键
 - [ ] LlmClient（OpenAI 兼容 fetch、AbortController 超时、指数退避重试 ×2、并发池）
@@ -292,3 +292,13 @@
 - 版本调整：TypeScript 固定 ~6.0.3 —— typescript-eslint 8.67 尚不支持 TS 7（升级路径见 typescript-eslint#10940）
 - 兼容性备忘：chrome.tabs.group/updateGroup/ungroup 在类型上是回调式签名，已在 groupsWrap 用类型化 shim 固化为 Promise 形态
 - **待人工验收清单**：① 加载 .output/chrome-mv3 ② 开 20+ 标签：新增/关闭/切换/固定/静音实时同步 ③ 按域名分组→排序→再开新标签不串组 ④ 清理重复→快照恢复→已打开页被跳过 ⑤ SW 手动停止(service worker 面板)后操作仍正常（注册表对账生效）
+
+### M2（已完成）
+- 规则模型：DomainRule{matchType: domain|keyword, pattern, category, enabled}；数组顺序即优先级
+- 匹配语义：域名=主域+全部子域（容忍粘贴 URL、自动去 www./路径/端口）；关键词=标题或网址的大小写不敏感子串
+- 类别配色：FNV-1a 哈希稳定取色，同一类别跨会话同色（区别于域名分组的顺序轮转）
+- 设置存储：settingsStore（KV 注入式，默认值向前兼容合并）；分类删除被引用时阻止并提示
+- 缓存层：categoryCache（sha1 归一化键 + TTL 14d + 过期清理），M3 接入 LLM 结果写入
+- 新动作：groupTabsByRules（清场旧组→按类别建组→返回未匹配数）；Side Panel 新增「按类别分组」按钮
+- Options 页重写为规则编辑器：分类 chips 管理 / 规则增删改查 / ↑↓ 调优先级 / 启停开关
+- 质量：53 单测全绿（新增 21 个），lint 0 错 0 警，构建 390.7 KB

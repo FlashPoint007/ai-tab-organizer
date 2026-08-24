@@ -15,6 +15,9 @@ import {
   ungroupTabs as ungroupTabsApi,
 } from '../browser/groupsWrap';
 import { getAllTabsMeta, getWindowTabsMeta } from '../browser/tabsWrap';
+import { applyRules, colorForCategory, computeCategoryGroups } from '../organizer/rules';
+import { loadSettings, saveSettings } from '../settings/settingsStore';
+import { localKV } from '../storage/browserKv';
 import { err, ok } from '../types';
 import type { Result } from '../types';
 import {
@@ -185,6 +188,46 @@ async function dispatch(req: Request): Promise<unknown> {
 
     case 'deleteSnapshot': {
       await deleteSnapshot(req.id);
+      return null;
+    }
+
+    case 'groupTabsByRules': {
+      const windowId = await lastFocusedWindowId();
+      const tabs = await getWindowTabsMeta(windowId);
+      const settings = await loadSettings(localKV);
+
+      const assignments = applyRules(tabs, settings.rules);
+      const groups = computeCategoryGroups(tabs, assignments, settings.minGroupSizeForRules);
+
+      // 清场后按类别建组：配色由类别名哈希决定，跨会话稳定
+      await ungroupAllUngroupedTabsInWindow(windowId);
+      let groupedTabs = 0;
+      for (const group of groups) {
+        await createTabGroup(windowId, group.tabIds, {
+          title: group.category,
+          color: colorForCategory(group.category),
+          collapsed: false,
+        });
+        groupedTabs += group.tabIds.length;
+      }
+      return { groups: groups.length, groupedTabs, unmatched: tabs.length - groupedTabs };
+    }
+
+    case 'listRules':
+      return (await loadSettings(localKV)).rules;
+
+    case 'saveRules': {
+      const settings = await loadSettings(localKV);
+      await saveSettings({ ...settings, rules: req.rules }, localKV);
+      return null;
+    }
+
+    case 'listCategories':
+      return (await loadSettings(localKV)).categories;
+
+    case 'saveCategories': {
+      const settings = await loadSettings(localKV);
+      await saveSettings({ ...settings, categories: req.categories }, localKV);
       return null;
     }
 

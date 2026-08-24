@@ -8,6 +8,8 @@
  */
 import { z } from 'zod';
 
+import type { DomainRule } from '../settings/types';
+
 export const tabMetaSchema = z.object({
   id: z.number(),
   windowId: z.number(),
@@ -27,6 +29,16 @@ export type TabMetaMessage = z.infer<typeof tabMetaSchema>;
 // ---------- Panel -> Background ----------
 
 const tabIdsField = z.array(z.number().int()).min(1);
+
+export const ruleMatchTypeSchema = z.enum(['domain', 'keyword']);
+
+export const domainRuleSchema = z.object({
+  id: z.string(),
+  matchType: ruleMatchTypeSchema,
+  pattern: z.string().min(1).max(200),
+  category: z.string().min(1).max(30),
+  enabled: z.boolean(),
+});
 
 export const requestSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('getSnapshot') }),
@@ -52,6 +64,14 @@ export const requestSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('listSnapshots') }),
   z.object({ type: z.literal('restoreSnapshot'), id: z.string() }),
   z.object({ type: z.literal('deleteSnapshot'), id: z.string() }),
+  z.object({ type: z.literal('groupTabsByRules') }),
+  z.object({ type: z.literal('listRules') }),
+  z.object({ type: z.literal('saveRules'), rules: z.array(domainRuleSchema).max(500) }),
+  z.object({ type: z.literal('listCategories') }),
+  z.object({
+    type: z.literal('saveCategories'),
+    categories: z.array(z.string().min(1).max(30)).max(100),
+  }),
 ]);
 
 export type Request = z.infer<typeof requestSchema>;
@@ -74,6 +94,11 @@ export type RequestPayloadMap = {
   listSnapshots: Array<{ id: string; createdAt: number; label: string; reason: string; count: number }>;
   restoreSnapshot: { opened: number; skipped: number };
   deleteSnapshot: null;
+  groupTabsByRules: { groups: number; groupedTabs: number; unmatched: number };
+  listRules: DomainRule[];
+  saveRules: null;
+  listCategories: string[];
+  saveCategories: null;
 };
 
 // ---------- Background -> Pages ----------

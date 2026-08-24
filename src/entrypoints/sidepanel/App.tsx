@@ -164,6 +164,14 @@ export default function App() {
     showStatus(`已排序，移动了 ${r.moved} 个标签`);
   });
 
+  const groupByRules = () => void run(async () => {
+    const r = await sendRequest<{ groups: number; groupedTabs: number; unmatched: number }>({
+      type: 'groupTabsByRules',
+    });
+    const extra = r.unmatched > 0 ? `，${r.unmatched} 个未匹配` : '';
+    showStatus(`已按类别分成 ${r.groups} 组（${r.groupedTabs} 个标签${extra}）`);
+  });
+
   const executeCleanup = () => {
     if (!pendingCleanup) return;
     const { kind, tabIds } = pendingCleanup;
@@ -222,6 +230,7 @@ export default function App() {
         />
         <div className="mt-2 flex flex-wrap gap-1.5">
           <button type="button" className={toolbarBtn} onClick={groupByDomain}>按域名分组</button>
+          <button type="button" className={toolbarBtn} onClick={groupByRules}>按类别分组</button>
           <button type="button" className={toolbarBtn} onClick={sortByDomain}>域名排序</button>
           <button type="button" className={toolbarBtn} onClick={() => askCleanup('duplicates')}>
             清理重复{duplicateCount > 0 ? `(${duplicateCount})` : ''}
