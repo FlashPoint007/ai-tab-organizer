@@ -380,6 +380,26 @@ export default function App() {
             {!testResult && savedAt && <span className="text-xs text-emerald-400">已保存于 {savedAt}</span>}
           </div>
 
+          <div className="pt-1">
+            <button
+              type="button"
+              className="text-[11px] text-neutral-500 underline decoration-dotted hover:text-amber-400"
+              title="分类结果有缓存：改了分类策略或想让 AI 重新细分时，先清缓存再整理"
+              onClick={() => {
+                void (async () => {
+                  try {
+                    await sendRequest({ type: 'clearCategoryCache' });
+                    setError(null);
+                  } catch (e) {
+                    fail(e);
+                  }
+                })();
+              }}
+            >
+              清空 AI 分类缓存（下次整理将全部重新分类）
+            </button>
+          </div>
+
           {usage && (
             <p className="pt-1 text-[11px] text-neutral-500">
               用量统计：请求 {usage.requests} 次 · 累计 {usage.totalTokens} tokens · 降级批次{' '}

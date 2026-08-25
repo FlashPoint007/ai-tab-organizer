@@ -83,6 +83,7 @@ const zh = {
   savedAt: '已保存于 {time}',
   usageStats: '用量统计：请求 {requests} 次 · 累计 {tokens} tokens · 降级批次 {degraded}',
   resetUsage: '清零',
+  clearCategoryCache: '清空 AI 分类缓存（下次整理将全部重新分类）',
   sectionCategories: '分类管理',
   categoriesDesc:
     '这份类别清单同时约束规则引擎与 AI 分类输出；AI 对没把握的标签会跳过并回落到规则。',
@@ -206,6 +207,7 @@ const en: Dictionary = {
   savedAt: 'Saved at {time}',
   usageStats: 'Usage: {requests} requests · {tokens} tokens · {degraded} degraded batches',
   resetUsage: 'Reset',
+  clearCategoryCache: 'Clear AI classification cache (everything will be re-classified next time)',
   sectionCategories: 'Categories',
   categoriesDesc:
     'This list constrains both the rule engine and AI outputs; the AI skips tabs it is unsure about and they fall back to rules.',

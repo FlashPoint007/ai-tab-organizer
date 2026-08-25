@@ -41,6 +41,6 @@ describe('categoryCache', () => {
     await clearCategoryCache(kv);
     expect(await getCachedCategory(kv, 'k', NOW)).toBeUndefined();
     await putCachedCategory(kv, '', 'A', NOW); // 不应抛错也不应生效
-    expect(Object.keys((await kv.get('categoryCache:v1')) as object)).toHaveLength(0);
+    expect(Object.keys((await kv.get('categoryCache:v2')) as object)).toHaveLength(0);
   });
 });

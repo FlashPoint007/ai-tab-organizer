@@ -138,6 +138,7 @@ export const requestSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('getLlmConfig') }),
   z.object({ type: z.literal('getLlmUsage') }),
   z.object({ type: z.literal('clearLlmUsage') }),
+  z.object({ type: z.literal('clearCategoryCache') }),
   z.object({ type: z.literal('planOrganizeByLlm') }),
   z.object({
     type: z.literal('applyCategoryPlan'),
@@ -191,6 +192,7 @@ export type RequestPayloadMap = {
   getLlmConfig: LlmConfigPayload | null;
   getLlmUsage: LlmUsageStats;
   clearLlmUsage: null;
+  clearCategoryCache: null;
   planOrganizeByLlm: OrganizePlan;
   applyCategoryPlan: { groups: number; groupedTabs: number };
   getUiSettings: { language: 'zh' | 'en'; autoApply: boolean; autoOrganize: {

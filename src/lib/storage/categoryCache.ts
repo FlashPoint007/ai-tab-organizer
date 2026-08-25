@@ -6,7 +6,8 @@
  */
 import type { KVStorage } from './kv';
 
-const CACHE_KEY = 'categoryCache:v1';
+// v2：分类策略升级为「按内容细分」后整体失效旧缓存（v1 里是宽泛类别的结果）
+const CACHE_KEY = 'categoryCache:v2';
 
 /** 默认 TTL：14 天。 */
 export const CATEGORY_CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000;

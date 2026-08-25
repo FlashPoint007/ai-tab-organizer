@@ -28,6 +28,7 @@ import { safeBroadcast } from './tabEventHub';
 import { applyCategoryPlan, computeOrganizePlan } from './organizeService';
 import { syncAutoOrganizeAlarm } from './autoTrigger';
 import { localKV } from '../storage/browserKv';
+import { clearCategoryCache } from '../storage/categoryCache';
 import { err, ok } from '../types';
 import type { Result } from '../types';
 import {
@@ -289,6 +290,10 @@ async function dispatch(req: Request): Promise<unknown> {
 
     case 'clearLlmUsage':
       await clearLlmUsage(localKV);
+      return null;
+
+    case 'clearCategoryCache':
+      await clearCategoryCache(localKV);
       return null;
 
     case 'planOrganizeByLlm': {
