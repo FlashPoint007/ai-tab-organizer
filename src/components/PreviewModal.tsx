@@ -17,7 +17,7 @@ interface PreviewModalProps {
   categories: string[];
   t: Translator;
   onCancel: () => void;
-  onApplied: (r: { groups: number; groupedTabs: number }) => void;
+  onApplied: (r: { groups: number; groupedTabs: number }, learned: number) => void;
   onError: (message: string) => void;
 }
 
@@ -29,6 +29,15 @@ export function PreviewModal({ plan, tabs, categories, t, onCancel, onApplied, o
       return [{ tabId: a.tabId, category: a.category, title: tab.title, url: tab.url, included: true }];
     }),
   );
+  const [learn, setLearn] = useState(true);
+
+  /** 用户相对 AI 原方案的类别修正（用于沉淀域名规则）。 */
+  function collectCorrections(): Array<{ url: string; category: string }> {
+    const original = new Map(plan.assignments.map((a) => [a.tabId, a.category]));
+    return entries
+      .filter((e) => e.included && original.get(e.tabId) !== e.category)
+      .map((e) => ({ url: e.url, category: e.category }));
+  }
 
   const includedCount = entries.filter((e) => e.included).length;
 
@@ -48,13 +57,22 @@ export function PreviewModal({ plan, tabs, categories, t, onCancel, onApplied, o
   function confirm(): void {
     const assignments = entries.filter((e) => e.included).map((e) => ({ tabId: e.tabId, category: e.category }));
     if (assignments.length === 0) return;
+    const corrections = learn ? collectCorrections() : [];
     void (async () => {
       try {
         const r = await sendRequest<{ groups: number; groupedTabs: number }>({
           type: 'applyCategoryPlan',
           assignments,
         });
-        onApplied(r);
+        let learned = 0;
+        if (corrections.length > 0) {
+          const lr = await sendRequest<{ added: number; updated: number }>({
+            type: 'learnFromCorrections',
+            corrections,
+          });
+          learned = lr.added + lr.updated;
+        }
+        onApplied(r, learned);
       } catch (e) {
         onError(e instanceof Error ? e.message : String(e));
       }
@@ -140,7 +158,19 @@ export function PreviewModal({ plan, tabs, categories, t, onCancel, onApplied, o
         </div>
 
         <div className="flex items-center gap-2 border-t border-neutral-800 p-3">
-          <span className="mr-auto text-xs text-neutral-400">
+          <label
+            className="mr-auto flex items-center gap-1.5 text-[11px] text-neutral-400"
+            title={t('learnCheckbox')}
+          >
+            <input
+              type="checkbox"
+              className="accent-emerald-600"
+              checked={learn}
+              onChange={(e) => setLearn(e.target.checked)}
+            />
+            {t('learnCheckbox')}
+          </label>
+          <span className="text-xs text-neutral-400">
             {entries.filter((e) => e.included).length}/{entries.length}
           </span>
           <button

@@ -597,7 +597,7 @@ export default function App() {
           categories={categoriesList}
           t={t}
           onCancel={() => setPreviewPlan(null)}
-          onApplied={(r) => {
+          onApplied={(r, learned) => {
             const fresh = previewPlan?.newCategories ?? [];
             setPreviewPlan(null);
             // 侧边栏同步：切到分类视图
@@ -607,6 +607,7 @@ export default function App() {
               fresh.length > 0
                 ? t('statusNewCategories', { count: fresh.length, names: fresh.join('、') })
                 : '',
+              learned > 0 ? t('statusLearned', { count: learned }) : '',
             ].filter(Boolean);
             showStatus(parts.join('，'));
           }}

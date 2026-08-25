@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { browser } from 'wxt/browser';
 
 import { sendRequest } from '@/lib/messaging/client';
 import type { LlmConfigPayload, LlmUsageStats } from '@/lib/messaging/protocol';
+import { buildBackupFileName, parseBackupText } from '@/lib/settings/backup';
 import type { AutoOrganizeConfig, DomainRule, UiLanguage } from '@/lib/settings/types';
 import { findPreset, LLM_PRESETS, originFromBaseUrl } from '@/lib/llm/presets';
 
@@ -35,6 +36,7 @@ export default function App() {
   // M4：自动化与界面
   const [uiLanguage, setUiLanguage] = useState<UiLanguage>('zh');
   const [autoApplyState, setAutoApplyState] = useState(false);
+  const [realtimeState, setRealtimeState] = useState(true);
   const [autoOrganize, setAutoOrganize] = useState<AutoOrganizeConfig>({
     mode: 'off',
     intervalMinutes: 30,
@@ -60,15 +62,19 @@ export default function App() {
           sendRequest<string[]>({ type: 'listCategories' }),
           sendRequest<LlmUsageStats>({ type: 'getLlmUsage' }),
           sendRequest<LlmConfigPayload | null>({ type: 'getLlmConfig' }),
-          sendRequest<{ language: UiLanguage; autoApply: boolean; autoOrganize: AutoOrganizeConfig }>({
-            type: 'getUiSettings',
-          }),
+          sendRequest<{
+            language: UiLanguage;
+            autoApply: boolean;
+            realtime: boolean;
+            autoOrganize: AutoOrganizeConfig;
+          }>({ type: 'getUiSettings' }),
         ]);
         setRules(r);
         setCategories(c);
         setUsage(u);
         setUiLanguage(ui.language);
         setAutoApplyState(ui.autoApply);
+        setRealtimeState(ui.realtime);
         setAutoOrganize(ui.autoOrganize);
         setLlm(
           cfg
@@ -112,12 +118,123 @@ export default function App() {
   );
 
   const saveUi = useCallback(
-    async (patch: { language?: UiLanguage; autoApply?: boolean; autoOrganize?: AutoOrganizeConfig }) => {
+    async (patch: {
+      language?: UiLanguage;
+      autoApply?: boolean;
+      realtime?: boolean;
+      autoOrganize?: AutoOrganizeConfig;
+    }) => {
       try {
         await sendRequest({ type: 'saveUiSettings', ...patch });
       } catch (e) {
         fail(e);
       }
+    },
+    [fail],
+  );
+
+  // ---- 备份与恢复 ----
+  const importFileRef = useRef<HTMLInputElement | null>(null);
+  const [exportIncludeKey, setExportIncludeKey] = useState(false);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
+
+  const handleExport = useCallback((): void => {
+    void (async () => {
+      try {
+        const bundle = await sendRequest<{
+          rules: DomainRule[];
+          categories: string[];
+          minGroupSizeForRules: number;
+          autoApply: boolean;
+          autoOrganize: AutoOrganizeConfig;
+          language: UiLanguage;
+          realtime: boolean;
+          llm: LlmConfigPayload | null;
+        }>({ type: 'getExportBundle' });
+
+        const backup = {
+          version: 1 as const,
+          exportedAt: new Date().toISOString(),
+          settings: {
+            rules: bundle.rules,
+            categories: bundle.categories,
+            minGroupSizeForRules: bundle.minGroupSizeForRules,
+            autoApply: bundle.autoApply,
+            autoOrganize: bundle.autoOrganize,
+            language: bundle.language,
+            realtime: bundle.realtime,
+            llm: bundle.llm
+              ? {
+                  preset: bundle.llm.preset,
+                  baseUrl: bundle.llm.baseUrl,
+                  model: bundle.llm.model,
+                  ...(exportIncludeKey && bundle.llm.apiKey ? { apiKey: bundle.llm.apiKey } : {}),
+                  ...(bundle.llm.temperature !== undefined
+                    ? { temperature: bundle.llm.temperature }
+                    : {}),
+                }
+              : null,
+          },
+        };
+
+        const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = buildBackupFileName();
+        anchor.click();
+        URL.revokeObjectURL(url);
+        setImportMsg('已导出 ' + anchor.download);
+      } catch (e) {
+        fail(e);
+      }
+    })();
+  }, [exportIncludeKey, fail]);
+
+  const handleImport = useCallback(
+    (file: File): void => {
+      void (async () => {
+        try {
+          const backup = parseBackupText(await file.text());
+          const s = backup.settings;
+          await sendRequest({ type: 'saveRules', rules: s.rules });
+          if (s.categories.length > 0) {
+            await sendRequest({ type: 'saveCategories', categories: s.categories });
+          }
+          await sendRequest({
+            type: 'saveUiSettings',
+            ...(s.language !== undefined ? { language: s.language } : {}),
+            ...(s.autoApply !== undefined ? { autoApply: s.autoApply } : {}),
+            ...(s.realtime !== undefined ? { realtime: s.realtime } : {}),
+            ...(s.autoOrganize !== undefined ? { autoOrganize: s.autoOrganize } : {}),
+          });
+          if (s.llm) {
+            await sendRequest({ type: 'saveLlmConfig', config: s.llm });
+          }
+          // 刷新本地视图状态
+          const [r, c, u, cfg] = await Promise.all([
+            sendRequest<DomainRule[]>({ type: 'listRules' }),
+            sendRequest<string[]>({ type: 'listCategories' }),
+            sendRequest<LlmUsageStats>({ type: 'getLlmUsage' }),
+            sendRequest<LlmConfigPayload | null>({ type: 'getLlmConfig' }),
+          ]);
+          setRules(r);
+          setCategories(c);
+          setUsage(u);
+          if (cfg) {
+            setLlm({
+              preset: cfg.preset,
+              baseUrl: cfg.baseUrl,
+              model: cfg.model,
+              apiKey: cfg.apiKey ?? '',
+              temperature: cfg.temperature !== undefined ? String(cfg.temperature) : '',
+            });
+          }
+          setImportMsg('导入成功：' + s.rules.length + ' 条规则，' + s.categories.length + ' 个分类');
+        } catch (e) {
+          fail(e);
+        }
+      })();
     },
     [fail],
   );
@@ -463,6 +580,23 @@ export default function App() {
         </div>
 
         <div className="mt-3 flex items-center gap-2">
+          <label className="w-24 shrink-0 text-xs text-neutral-500">实时归类</label>
+          <label className="flex items-center gap-1.5 text-xs text-neutral-300">
+            <input
+              type="checkbox"
+              className="accent-emerald-600"
+              checked={realtimeState}
+              onChange={(e) => {
+                const realtime = e.target.checked;
+                setRealtimeState(realtime);
+                void saveUi({ realtime });
+              }}
+            />
+            新标签打开后自动归类入组（缓存/规则优先，必要时单条 AI 请求）
+          </label>
+        </div>
+
+        <div className="mt-3 flex items-center gap-2">
           <label className="w-24 shrink-0 text-xs text-neutral-500">自动触发</label>
           <select
             value={autoOrganize.mode}
@@ -673,6 +807,45 @@ export default function App() {
           <button type="button" className={btn + ' !border-emerald-700 !text-emerald-400'} onClick={addRule}>
             添加规则
           </button>
+        </div>
+      </section>
+
+      {/* 备份与恢复 */}
+      <section className="mt-8">
+        <h2 className="text-base font-semibold">备份与恢复</h2>
+        <p className="mt-1 text-xs leading-relaxed text-neutral-500">
+          导出内容：分组规则、分类清单、AI 模型配置与界面偏好（不含快照与分类缓存）。
+          导入按「文件里有什么就恢复什么」，其余保持不变。
+        </p>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-1.5 text-xs text-neutral-300">
+            <input
+              type="checkbox"
+              className="accent-emerald-600"
+              checked={exportIncludeKey}
+              onChange={(e) => setExportIncludeKey(e.target.checked)}
+            />
+            导出时包含 API Key（含敏感信息，慎选）
+          </label>
+          <button type="button" className={btn} onClick={handleExport}>
+            导出备份
+          </button>
+          <button type="button" className={btn} onClick={() => importFileRef.current?.click()}>
+            导入备份
+          </button>
+          <input
+            ref={importFileRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = '';
+              if (file) void handleImport(file);
+            }}
+          />
+          {importMsg && <span className="text-xs text-emerald-400">{importMsg}</span>}
         </div>
       </section>
     </main>

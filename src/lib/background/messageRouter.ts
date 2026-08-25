@@ -16,6 +16,7 @@ import {
 } from '../browser/groupsWrap';
 import { getAllTabsMeta, getWindowTabsMeta } from '../browser/tabsWrap';
 import { applyRules, colorForCategory, computeCategoryGroups } from '../organizer/rules';
+import { mergeLearnedRules } from '../organizer/learning';
 import { loadSettings, saveSettings } from '../settings/settingsStore';
 import {
   clearLlmUsage,
@@ -315,6 +316,7 @@ async function dispatch(req: Request): Promise<unknown> {
       return {
         language: settings.language,
         autoApply: settings.autoApply,
+        realtime: settings.realtime,
         autoOrganize: settings.autoOrganize,
       };
     }
@@ -325,6 +327,7 @@ async function dispatch(req: Request): Promise<unknown> {
         ...settings,
         ...(req.language !== undefined ? { language: req.language } : {}),
         ...(req.autoApply !== undefined ? { autoApply: req.autoApply } : {}),
+        ...(req.realtime !== undefined ? { realtime: req.realtime } : {}),
         ...(req.autoOrganize !== undefined ? { autoOrganize: req.autoOrganize } : {}),
       };
       await saveSettings(next, localKV);
@@ -332,6 +335,29 @@ async function dispatch(req: Request): Promise<unknown> {
       // 让已打开的 Side Panel 即时切换语言 / 生效 autoApply
       safeBroadcast({ type: 'settingsChanged', language: next.language, autoApply: next.autoApply });
       return null;
+    }
+
+    case 'getExportBundle': {
+      const settings = await loadSettings(localKV);
+      return {
+        rules: settings.rules,
+        categories: settings.categories,
+        minGroupSizeForRules: settings.minGroupSizeForRules,
+        autoApply: settings.autoApply,
+        autoOrganize: settings.autoOrganize,
+        language: settings.language,
+        realtime: settings.realtime,
+        llm: settings.llm,
+      };
+    }
+
+    case 'learnFromCorrections': {
+      const settings = await loadSettings(localKV);
+      const outcome = mergeLearnedRules(settings.rules, req.corrections, () => crypto.randomUUID());
+      if (outcome.added > 0 || outcome.updated > 0) {
+        await saveSettings({ ...settings, rules: outcome.rules }, localKV);
+      }
+      return { added: outcome.added, updated: outcome.updated };
     }
 
     case 'restoreSnapshot': {

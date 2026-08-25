@@ -53,6 +53,7 @@ export async function loadSettings(kv: KVStorage): Promise<Settings> {
           }
         : { ...DEFAULT_SETTINGS.autoOrganize },
     language: stored.language === 'en' ? 'en' : 'zh',
+    realtime: typeof stored.realtime === 'boolean' ? stored.realtime : DEFAULT_SETTINGS.realtime,
   };
 }
 

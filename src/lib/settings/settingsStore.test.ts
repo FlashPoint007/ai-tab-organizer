@@ -22,6 +22,7 @@ describe('settingsStore', () => {
       autoApply: false,
       autoOrganize: { mode: 'interval' as const, intervalMinutes: 30, thresholdCount: 8 },
       language: 'zh' as const,
+      realtime: true,
     };
     await saveSettings(settings, kv);
     expect(await loadSettings(kv)).toEqual(settings);

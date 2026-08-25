@@ -151,6 +151,7 @@ export const requestSchema = z.discriminatedUnion('type', [
     type: z.literal('saveUiSettings'),
     language: z.enum(['zh', 'en']).optional(),
     autoApply: z.boolean().optional(),
+    realtime: z.boolean().optional(),
     autoOrganize: z
       .object({
         mode: z.enum(['off', 'interval', 'threshold']),
@@ -158,6 +159,18 @@ export const requestSchema = z.discriminatedUnion('type', [
         thresholdCount: z.number().int().min(2).max(200),
       })
       .optional(),
+  }),
+  z.object({ type: z.literal('getExportBundle') }),
+  z.object({
+    type: z.literal('learnFromCorrections'),
+    corrections: z
+      .array(
+        z.object({
+          url: z.string().min(1).max(2000),
+          category: z.string().min(1).max(30),
+        }),
+      )
+      .max(200),
   }),
 ]);
 
@@ -195,12 +208,23 @@ export type RequestPayloadMap = {
   clearCategoryCache: null;
   planOrganizeByLlm: OrganizePlan;
   applyCategoryPlan: { groups: number; groupedTabs: number };
-  getUiSettings: { language: 'zh' | 'en'; autoApply: boolean; autoOrganize: {
+  getUiSettings: { language: 'zh' | 'en'; autoApply: boolean; realtime: boolean; autoOrganize: {
     mode: 'off' | 'interval' | 'threshold';
     intervalMinutes: number;
     thresholdCount: number;
   } };
   saveUiSettings: null;
+  learnFromCorrections: { added: number; updated: number };
+  getExportBundle: {
+    rules: DomainRule[];
+    categories: string[];
+    minGroupSizeForRules: number;
+    autoApply: boolean;
+    autoOrganize: { mode: 'off' | 'interval' | 'threshold'; intervalMinutes: number; thresholdCount: number };
+    language: 'zh' | 'en';
+    realtime: boolean;
+    llm: { preset: string; baseUrl: string; model: string; apiKey?: string; temperature?: number; maxOutputTokens?: number } | null;
+  };
 };
 
 // ---------- Background -> Pages ----------

@@ -54,6 +54,8 @@ export interface Settings {
   /** M4：自动整理触发器配置（快捷键始终可用，不占此开关） */
   autoOrganize: AutoOrganizeConfig;
   language: UiLanguage;
+  /** M6：新标签实时归类（缓存→规则→单条LLM→自动入组） */
+  realtime: boolean;
 }
 
 export const DEFAULT_CATEGORIES: readonly string[] = [
@@ -78,4 +80,5 @@ export const DEFAULT_SETTINGS: Settings = {
   autoApply: false,
   autoOrganize: { mode: 'off', intervalMinutes: 30, thresholdCount: 8 },
   language: 'zh',
+  realtime: true,
 };
