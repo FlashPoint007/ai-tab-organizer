@@ -1,7 +1,8 @@
 /**
- * AI 分类管线（M3 核心）：
- * 过滤内部页 → 缓存命中 → 未命中批量并发送 LLM → 鲁棒解析 → 写回缓存
- * → 单批失败降级规则引擎 → 按类别建组 → 累计用量统计。
+ * AI 分类管线（M3/M4）：
+ * - computeOrganizePlan：过滤→缓存→批量LLM→解析写回→失败批次回落规则，产出「分类方案」
+ * - applyCategoryPlan：清场旧组后按方案建组
+ * - organizeTabsByLlm：两段连跑（自动触发器/跳过预览时使用）
  */
 import { createLlmClient, LlmError } from '../llm/client';
 import { buildClassifyMessages } from '../llm/prompts';
@@ -20,7 +21,11 @@ import {
 } from '../storage/categoryCache';
 import { cacheKeyFor } from '../../utils/url';
 import type { TabMeta } from '../types';
-import type { OrganizeSummary, LlmUsageStats } from '../messaging/protocol';
+import type {
+  LlmUsageStats,
+  OrganizePlan,
+  OrganizePlanStats,
+} from '../messaging/protocol';
 
 const USAGE_KEY = 'llmUsage:v1';
 
@@ -72,7 +77,8 @@ export function describeLlmError(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-export async function organizeTabsByLlm(windowId: number): Promise<OrganizeSummary> {
+/** 阶段一：只算方案，不动浏览器分组。 */
+export async function computeOrganizePlan(windowId: number): Promise<OrganizePlan> {
   const settings = await loadSettings(localKV);
   const config = settings.llm;
   if (!config || !config.baseUrl || !config.model) {
@@ -141,7 +147,6 @@ export async function organizeTabsByLlm(windowId: number): Promise<OrganizeSumma
           }
         }
       } catch {
-        // 该批整体降级到规则引擎
         batchesFailed += 1;
         for (const t of mine) ruleFallbackIds.add(t.id);
       }
@@ -161,9 +166,36 @@ export async function organizeTabsByLlm(windowId: number): Promise<OrganizeSumma
     }
   }
 
-  // ---- 建组 ----
+  const stats: OrganizePlanStats = {
+    llmAssigned,
+    cacheHits,
+    ruleFallback,
+    skippedInternal,
+    batchesFailed,
+    requests,
+    totalTokens,
+    candidates: candidates.length,
+  };
+
+  await bumpUsage({ requests, totalTokens, degradedBatches: batchesFailed }, localKV);
+
+  return {
+    stats,
+    assignments: [...assignments.entries()].map(([tabId, category]) => ({ tabId, category })),
+  };
+}
+
+/** 阶段二：把方案落到 Chrome 标签组。 */
+export async function applyCategoryPlan(
+  windowId: number,
+  assignments: Array<{ tabId: number; category: string }>,
+): Promise<{ groups: number; groupedTabs: number }> {
+  const settings = await loadSettings(localKV);
+  const allTabs = await getWindowTabsMeta(windowId);
+  const assignmentMap = new Map(assignments.map((a) => [a.tabId, a.category]));
+
   await ungroupAllUngroupedTabsInWindow(windowId);
-  const groups = computeCategoryGroups(allTabs, assignments, settings.minGroupSizeForRules);
+  const groups = computeCategoryGroups(allTabs, assignmentMap, settings.minGroupSizeForRules);
   let groupedTabs = 0;
   for (const group of groups) {
     await createTabGroup(windowId, group.tabIds, {
@@ -173,18 +205,14 @@ export async function organizeTabsByLlm(windowId: number): Promise<OrganizeSumma
     });
     groupedTabs += group.tabIds.length;
   }
+  return { groups: groups.length, groupedTabs };
+}
 
-  await bumpUsage({ requests, totalTokens, degradedBatches: batchesFailed }, localKV);
-
-  return {
-    groups: groups.length,
-    groupedTabs,
-    llmAssigned,
-    cacheHits,
-    ruleFallback,
-    skippedInternal,
-    batchesFailed,
-    requests,
-    totalTokens,
-  };
+/** 两段连跑：自动触发器与「跳过预览」路径使用。 */
+export async function organizeTabsByLlm(
+  windowId: number,
+): Promise<OrganizePlan & { groups: number; groupedTabs: number }> {
+  const plan = await computeOrganizePlan(windowId);
+  const applied = await applyCategoryPlan(windowId, plan.assignments);
+  return { ...plan, ...applied };
 }

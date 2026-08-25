@@ -64,9 +64,7 @@ export const llmConfigSchema = z.object({
 
 export type LlmConfigPayload = z.infer<typeof llmConfigSchema>;
 
-export interface OrganizeSummary {
-  groups: number;
-  groupedTabs: number;
+export interface OrganizePlanStats {
   llmAssigned: number;
   cacheHits: number;
   ruleFallback: number;
@@ -74,6 +72,23 @@ export interface OrganizeSummary {
   batchesFailed: number;
   requests: number;
   totalTokens: number;
+  /** 参与分类的网页标签数 */
+  candidates: number;
+}
+
+export interface PlanEntry {
+  tabId: number;
+  category: string;
+}
+
+export interface OrganizePlan {
+  stats: OrganizePlanStats;
+  assignments: PlanEntry[];
+}
+
+export interface OrganizeSummary extends OrganizePlanStats {
+  groups: number;
+  groupedTabs: number;
 }
 
 export interface LlmUsageStats {
@@ -121,6 +136,26 @@ export const requestSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('getLlmConfig') }),
   z.object({ type: z.literal('getLlmUsage') }),
   z.object({ type: z.literal('clearLlmUsage') }),
+  z.object({ type: z.literal('planOrganizeByLlm') }),
+  z.object({
+    type: z.literal('applyCategoryPlan'),
+    assignments: z
+      .array(z.object({ tabId: z.number().int(), category: z.string().min(1).max(30) }))
+      .max(1000),
+  }),
+  z.object({ type: z.literal('getUiSettings') }),
+  z.object({
+    type: z.literal('saveUiSettings'),
+    language: z.enum(['zh', 'en']).optional(),
+    autoApply: z.boolean().optional(),
+    autoOrganize: z
+      .object({
+        mode: z.enum(['off', 'interval', 'threshold']),
+        intervalMinutes: z.number().int().min(5).max(1440),
+        thresholdCount: z.number().int().min(2).max(200),
+      })
+      .optional(),
+  }),
 ]);
 
 export type Request = z.infer<typeof requestSchema>;
@@ -154,12 +189,25 @@ export type RequestPayloadMap = {
   getLlmConfig: LlmConfigPayload | null;
   getLlmUsage: LlmUsageStats;
   clearLlmUsage: null;
+  planOrganizeByLlm: OrganizePlan;
+  applyCategoryPlan: { groups: number; groupedTabs: number };
+  getUiSettings: { language: 'zh' | 'en'; autoApply: boolean; autoOrganize: {
+    mode: 'off' | 'interval' | 'threshold';
+    intervalMinutes: number;
+    thresholdCount: number;
+  } };
+  saveUiSettings: null;
 };
 
 // ---------- Background -> Pages ----------
 
 export const eventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('tabsUpdated'), windowId: z.number(), tabs: z.array(tabMetaSchema) }),
+  z.object({
+    type: z.literal('settingsChanged'),
+    language: z.enum(['zh', 'en']),
+    autoApply: z.boolean(),
+  }),
 ]);
 
 export type Event = z.infer<typeof eventSchema>;

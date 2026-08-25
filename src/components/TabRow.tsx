@@ -1,12 +1,14 @@
 import { memo } from 'react';
 
 import { faviconUrl } from '@/lib/messaging/client';
+import type { Translator } from '@/i18n';
 import type { TabMeta } from '@/lib/types';
 import { CloseIcon, PinIcon, VolumeOffIcon, VolumeOnIcon } from './icons';
 
 interface TabRowProps {
   tab: TabMeta;
   checked: boolean;
+  t: Translator;
   onToggleChecked: (tabId: number) => void;
   onActivate: (tabId: number) => void;
   onClose: (tabId: number) => void;
@@ -17,6 +19,7 @@ interface TabRowProps {
 function TabRowImpl({
   tab,
   checked,
+  t,
   onToggleChecked,
   onActivate,
   onClose,
@@ -67,7 +70,7 @@ function TabRowImpl({
 
       <button
         type="button"
-        title={tab.pinned ? '取消固定' : '固定'}
+        title={tab.pinned ? t('unpin') : t('pin')}
         className={actionBtn + (tab.pinned ? ' !opacity-100 text-amber-400' : '')}
         onClick={(e) => {
           e.stopPropagation();
@@ -79,7 +82,7 @@ function TabRowImpl({
 
       <button
         type="button"
-        title={tab.muted ? '取消静音' : '静音'}
+        title={tab.muted ? t('unmuteTitle') : t('mute')}
         className={actionBtn}
         onClick={(e) => {
           e.stopPropagation();
@@ -91,7 +94,7 @@ function TabRowImpl({
 
       <button
         type="button"
-        title="关闭标签"
+        title={t('closeTab')}
         className={actionBtn + ' hover:!text-red-400'}
         onClick={(e) => {
           e.stopPropagation();

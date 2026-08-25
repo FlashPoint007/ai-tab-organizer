@@ -3,7 +3,7 @@
  * 后台运行时传 localKV。
  */
 import type { KVStorage } from '../storage/kv';
-import type { Settings } from './types';
+import type { AutoOrganizeConfig, Settings } from './types';
 import { DEFAULT_SETTINGS } from './types';
 
 const SETTINGS_KEY = 'settings:v1';
@@ -37,6 +37,22 @@ export async function loadSettings(kv: KVStorage): Promise<Settings> {
       typeof stored.llmBatch.timeoutMs === 'number'
         ? stored.llmBatch
         : { ...DEFAULT_SETTINGS.llmBatch },
+    autoApply: typeof stored.autoApply === 'boolean' ? stored.autoApply : DEFAULT_SETTINGS.autoApply,
+    autoOrganize:
+      stored.autoOrganize && typeof stored.autoOrganize.mode === 'string'
+        ? {
+            mode: stored.autoOrganize.mode as AutoOrganizeConfig['mode'],
+            intervalMinutes:
+              typeof stored.autoOrganize.intervalMinutes === 'number'
+                ? Math.max(5, stored.autoOrganize.intervalMinutes)
+                : DEFAULT_SETTINGS.autoOrganize.intervalMinutes,
+            thresholdCount:
+              typeof stored.autoOrganize.thresholdCount === 'number'
+                ? Math.max(2, stored.autoOrganize.thresholdCount)
+                : DEFAULT_SETTINGS.autoOrganize.thresholdCount,
+          }
+        : { ...DEFAULT_SETTINGS.autoOrganize },
+    language: stored.language === 'en' ? 'en' : 'zh',
   };
 }
 

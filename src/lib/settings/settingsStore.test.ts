@@ -19,6 +19,9 @@ describe('settingsStore', () => {
       minGroupSizeForRules: 2,
       llm: null,
       llmBatch: { size: 10, concurrency: 1, timeoutMs: 5000 },
+      autoApply: false,
+      autoOrganize: { mode: 'interval' as const, intervalMinutes: 30, thresholdCount: 8 },
+      language: 'zh' as const,
     };
     await saveSettings(settings, kv);
     expect(await loadSettings(kv)).toEqual(settings);

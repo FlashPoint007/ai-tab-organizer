@@ -24,6 +24,9 @@ import {
   organizeTabsByLlm,
 } from './organizeService';
 import { createLlmClient } from '../llm/client';
+import { safeBroadcast } from './tabEventHub';
+import { applyCategoryPlan, computeOrganizePlan } from './organizeService';
+import { syncAutoOrganizeAlarm } from './autoTrigger';
 import { localKV } from '../storage/browserKv';
 import { err, ok } from '../types';
 import type { Result } from '../types';
@@ -271,6 +274,7 @@ async function dispatch(req: Request): Promise<unknown> {
         },
         localKV,
       );
+      void syncAutoOrganizeAlarm(localKV);
       return null;
     }
 
@@ -286,6 +290,44 @@ async function dispatch(req: Request): Promise<unknown> {
     case 'clearLlmUsage':
       await clearLlmUsage(localKV);
       return null;
+
+    case 'planOrganizeByLlm': {
+      const windowId = await lastFocusedWindowId();
+      try {
+        return await computeOrganizePlan(windowId);
+      } catch (e) {
+        throw new Error(describeLlmError(e), { cause: e });
+      }
+    }
+
+    case 'applyCategoryPlan': {
+      const windowId = await lastFocusedWindowId();
+      return applyCategoryPlan(windowId, req.assignments);
+    }
+
+    case 'getUiSettings': {
+      const settings = await loadSettings(localKV);
+      return {
+        language: settings.language,
+        autoApply: settings.autoApply,
+        autoOrganize: settings.autoOrganize,
+      };
+    }
+
+    case 'saveUiSettings': {
+      const settings = await loadSettings(localKV);
+      const next = {
+        ...settings,
+        ...(req.language !== undefined ? { language: req.language } : {}),
+        ...(req.autoApply !== undefined ? { autoApply: req.autoApply } : {}),
+        ...(req.autoOrganize !== undefined ? { autoOrganize: req.autoOrganize } : {}),
+      };
+      await saveSettings(next, localKV);
+      void syncAutoOrganizeAlarm(localKV);
+      // 让已打开的 Side Panel 即时切换语言 / 生效 autoApply
+      safeBroadcast({ type: 'settingsChanged', language: next.language, autoApply: next.autoApply });
+      return null;
+    }
 
     case 'restoreSnapshot': {
       const snapshot = await getSnapshot(req.id);

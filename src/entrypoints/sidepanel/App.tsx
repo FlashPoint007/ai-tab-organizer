@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { browser } from 'wxt/browser';
 
+import { PreviewModal } from '@/components/PreviewModal';
 import { SnapshotModal } from '@/components/SnapshotModal';
 import { TabRow } from '@/components/TabRow';
 import {
@@ -11,8 +12,11 @@ import {
 import { computeDomainGroups } from '@/lib/organizer/grouping';
 import { filterTabs } from '@/lib/organizer/filtering';
 import { sendRequest } from '@/lib/messaging/client';
+import type { OrganizePlan } from '@/lib/messaging/protocol';
 import { parseEvent } from '@/lib/messaging/protocol';
 import type { TabMeta } from '@/lib/types';
+import type { UiLanguage } from '@/lib/settings/types';
+import { makeTranslator } from '@/i18n';
 
 type ViewMode = 'flat' | 'domain';
 
@@ -29,18 +33,29 @@ export default function App() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [pendingCleanup, setPendingCleanup] = useState<PendingCleanup | null>(null);
   const [showSnapshotModal, setShowSnapshotModal] = useState(false);
+  const [previewPlan, setPreviewPlan] = useState<OrganizePlan | null>(null);
   const [groupTitleInput, setGroupTitleInput] = useState<string | null>(null);
   const [status, setStatus] = useState<{ text: string; bad?: boolean } | null>(null);
   const [collapsedDomains, setCollapsedDomains] = useState<Set<string>>(new Set());
 
+  const [locale, setLocale] = useState<UiLanguage>('zh');
+  const [autoApply, setAutoApply] = useState(false);
+  const [categoriesList, setCategoriesList] = useState<string[]>([]);
+  const [organizing, setOrganizing] = useState(false);
+
   const ownWindowIdRef = useRef<number | undefined>(undefined);
   const statusTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  const showStatus = useCallback((text: string, bad = false) => {
-    setStatus({ text, bad });
-    if (statusTimer.current !== undefined) clearTimeout(statusTimer.current);
-    statusTimer.current = setTimeout(() => setStatus(null), 3500);
-  }, []);
+  const t = useMemo(() => makeTranslator(locale), [locale]);
+
+  const showStatus = useCallback(
+    (text: string, bad = false) => {
+      setStatus({ text, bad });
+      if (statusTimer.current !== undefined) clearTimeout(statusTimer.current);
+      statusTimer.current = setTimeout(() => setStatus(null), 3500);
+    },
+    [],
+  );
 
   // ---------- 初始加载 + 事件订阅 ----------
   useEffect(() => {
@@ -48,7 +63,15 @@ export default function App() {
       try {
         const win = await browser.windows.getCurrent();
         ownWindowIdRef.current = win.id;
-        setTabs(await sendRequest<TabMeta[]>({ type: 'getSnapshot' }));
+        const [snapshot, ui, cats] = await Promise.all([
+          sendRequest<TabMeta[]>({ type: 'getSnapshot' }),
+          sendRequest<{ language: UiLanguage; autoApply: boolean }>({ type: 'getUiSettings' }),
+          sendRequest<string[]>({ type: 'listCategories' }),
+        ]);
+        setTabs(snapshot);
+        setLocale(ui.language);
+        setAutoApply(ui.autoApply);
+        setCategoriesList(cats);
       } catch (e) {
         showStatus(e instanceof Error ? e.message : String(e), true);
       } finally {
@@ -58,8 +81,13 @@ export default function App() {
 
     const listener = (raw: unknown): void => {
       const ev = parseEvent(raw);
-      if (ev?.type === 'tabsUpdated' && ev.windowId === ownWindowIdRef.current) {
+      if (!ev) return;
+      if (ev.type === 'tabsUpdated' && ev.windowId === ownWindowIdRef.current) {
         setTabs(ev.tabs);
+      }
+      if (ev.type === 'settingsChanged') {
+        setLocale(ev.language);
+        setAutoApply(ev.autoApply);
       }
     };
     browser.runtime.onMessage.addListener(listener);
@@ -70,7 +98,7 @@ export default function App() {
   useEffect(() => {
     setSelected((prev) => {
       if (prev.size === 0) return prev;
-      const alive = new Set(tabs.map((t) => t.id));
+      const alive = new Set(tabs.map((tab) => tab.id));
       const next = new Set([...prev].filter((id) => alive.has(id)));
       return next.size === prev.size ? prev : next;
     });
@@ -89,12 +117,17 @@ export default function App() {
     if (viewMode !== 'domain') return [];
     const groups = computeDomainGroups(visibleTabs, { minGroupSize: 1, includePinned: true });
     const groupedIds = new Set(groups.flatMap((g) => g.tabIds));
-    const rest = visibleTabs.filter((t) => !groupedIds.has(t.id));
-    return [...groups.map((g) => ({ key: g.domain, label: g.domain, tabs: tabsInOrder(g.tabIds) })), ...(rest.length > 0 ? [{ key: '__ungrouped__', label: '未分组', tabs: tabsInOrder(rest.map((t) => t.id)) }] : [])];
+    const rest = visibleTabs.filter((tab) => !groupedIds.has(tab.id));
+    return [
+      ...groups.map((g) => ({ key: g.domain, label: g.domain, tabs: tabsInOrder(g.tabIds) })),
+      ...(rest.length > 0
+        ? [{ key: '__ungrouped__', label: t('viewFlat'), tabs: tabsInOrder(rest.map((tab) => tab.id)) }]
+        : []),
+    ];
     function tabsInOrder(ids: number[]): TabMeta[] {
-      return ids.map((id) => visibleTabs.find((t) => t.id === id)).filter((t): t is TabMeta => !!t);
+      return ids.map((id) => visibleTabs.find((tab) => tab.id === id)).filter((tb): tb is TabMeta => !!tb);
     }
-  }, [viewMode, visibleTabs]);
+  }, [viewMode, visibleTabs, t]);
 
   // ---------- 动作 ----------
   const run = useCallback(
@@ -108,12 +141,22 @@ export default function App() {
     [showStatus],
   );
 
-  const activate = (tabId: number) => void run(() => sendRequest({ type: 'activateTab', tabId }).then(() => undefined));
-  const closeOne = (tabId: number) => void run(async () => { await sendRequest({ type: 'closeTabs', tabIds: [tabId] }); });
-  const togglePin = (tab: TabMeta) => void run(() => sendRequest({ type: 'setPinned', tabIds: [tab.id], pinned: !tab.pinned }).then(() => undefined));
-  const toggleMute = (tab: TabMeta) => void run(() => sendRequest({ type: 'setMuted', tabIds: [tab.id], muted: !tab.muted }).then(() => undefined));
+  const activate = (tabId: number): void =>
+    void run(() => sendRequest({ type: 'activateTab', tabId }).then(() => undefined));
+  const closeOne = (tabId: number): void =>
+    void run(async () => {
+      await sendRequest({ type: 'closeTabs', tabIds: [tabId] });
+    });
+  const togglePin = (tab: TabMeta): void =>
+    void run(() =>
+      sendRequest({ type: 'setPinned', tabIds: [tab.id], pinned: !tab.pinned }).then(() => undefined),
+    );
+  const toggleMute = (tab: TabMeta): void =>
+    void run(() =>
+      sendRequest({ type: 'setMuted', tabIds: [tab.id], muted: !tab.muted }).then(() => undefined),
+    );
 
-  const toggleChecked = (tabId: number) =>
+  const toggleChecked = (tabId: number): void =>
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(tabId)) next.delete(tabId);
@@ -124,13 +167,13 @@ export default function App() {
   const bulkAction = (
     action: 'closeTabs' | 'setPinned' | 'setMuted',
     extra?: { pinned?: boolean; muted?: boolean },
-  ) => {
+  ): void => {
     if (selected.size === 0) return;
     const tabIds = [...selected];
     void run(async () => {
       if (action === 'closeTabs') {
         const r = await sendRequest<{ closed: number }>({ type: 'closeTabs', tabIds });
-        showStatus(`已关闭 ${r.closed} 个标签`);
+        showStatus(t('statusClosedN', { count: r.closed }));
       } else if (action === 'setPinned') {
         await sendRequest({ type: 'setPinned', tabIds, pinned: extra?.pinned ?? true });
       } else {
@@ -140,88 +183,97 @@ export default function App() {
     });
   };
 
-  const createGroupFromSelection = () => {
+  const createGroupFromSelection = (): void => {
     const title = (groupTitleInput ?? '').trim();
     if (!title || selected.size === 0) return;
     void run(async () => {
       await sendRequest({ type: 'createGroupFromSelection', tabIds: [...selected], title });
-      showStatus(`已创建分组「${title}」`);
+      showStatus(t('statusGroupCreated', { name: title }));
       setGroupTitleInput(null);
       setSelected(new Set());
     });
   };
 
-  const groupByDomain = () => void run(async () => {
-    const r = await sendRequest<{ groups: number; groupedTabs: number }>({
-      type: 'groupTabsByDomain',
-      minGroupSize: 2,
+  const groupByDomain = (): void =>
+    void run(async () => {
+      const r = await sendRequest<{ groups: number; groupedTabs: number }>({
+        type: 'groupTabsByDomain',
+        minGroupSize: 2,
+      });
+      showStatus(t('statusGroupedByDomain', { groups: r.groups, tabs: r.groupedTabs }));
     });
-    showStatus(`已按域名分成 ${r.groups} 组（${r.groupedTabs} 个标签）`);
-  });
 
-  const sortByDomain = () => void run(async () => {
-    const r = await sendRequest<{ moved: number }>({ type: 'sortTabsByDomain' });
-    showStatus(`已排序，移动了 ${r.moved} 个标签`);
-  });
-
-  const groupByRules = () => void run(async () => {
-    const r = await sendRequest<{ groups: number; groupedTabs: number; unmatched: number }>({
-      type: 'groupTabsByRules',
+  const groupByRules = (): void =>
+    void run(async () => {
+      const r = await sendRequest<{ groups: number; groupedTabs: number; unmatched: number }>({
+        type: 'groupTabsByRules',
+      });
+      const extra = r.unmatched > 0 ? '，' + t('statusUnmatched', { count: r.unmatched }) : '';
+      showStatus(t('statusGroupedByCategory', { groups: r.groups, tabs: r.groupedTabs, extra }));
     });
-    const extra = r.unmatched > 0 ? `，${r.unmatched} 个未匹配` : '';
-    showStatus(`已按类别分成 ${r.groups} 组（${r.groupedTabs} 个标签${extra}）`);
-  });
 
-  const [organizing, setOrganizing] = useState(false);
+  const sortByDomain = (): void =>
+    void run(async () => {
+      const r = await sendRequest<{ moved: number }>({ type: 'sortTabsByDomain' });
+      showStatus(t('statusSorted', { count: r.moved }));
+    });
+
   const organizeByLlm = (): void => {
     if (organizing) return;
     setOrganizing(true);
     void run(async () => {
       try {
-        const r = await sendRequest<{
-          groups: number;
-          groupedTabs: number;
-          cacheHits: number;
-          ruleFallback: number;
-          batchesFailed: number;
-          totalTokens: number;
-        }>({ type: 'organizeByLlm' });
-
-        const parts = [
-          `AI 已归类 ${r.groupedTabs} 个标签为 ${r.groups} 组`,
-          r.cacheHits > 0 ? `缓存命中 ${r.cacheHits}` : '',
-          r.totalTokens > 0 ? `消耗 ${r.totalTokens} tokens` : '',
-          r.ruleFallback > 0 ? `规则兜底 ${r.ruleFallback}` : '',
-          r.batchesFailed > 0 ? `${r.batchesFailed} 批请求失败已自动降级` : '',
-        ].filter(Boolean);
-        showStatus(parts.join('，'));
+        if (autoApply) {
+          // 跳过预览：直接应用
+          const r = await sendRequest<{
+            groups: number;
+            groupedTabs: number;
+            cacheHits: number;
+            ruleFallback: number;
+            batchesFailed: number;
+            totalTokens: number;
+          }>({ type: 'organizeByLlm' });
+          const parts = [
+            t('statusAiGrouped', { grouped: r.groupedTabs, groups: r.groups }),
+            r.cacheHits > 0 ? t('statusCacheHits', { count: r.cacheHits }) : '',
+            r.totalTokens > 0 ? t('statusTokens', { count: r.totalTokens }) : '',
+            r.ruleFallback > 0 ? t('statusRuleFallback', { count: r.ruleFallback }) : '',
+            r.batchesFailed > 0 ? t('statusBatchesDegraded', { count: r.batchesFailed }) : '',
+          ].filter(Boolean);
+          showStatus(parts.join('，'));
+        } else {
+          // 预览确认流
+          const plan = await sendRequest<OrganizePlan>({ type: 'planOrganizeByLlm' });
+          setPreviewPlan(plan);
+        }
       } finally {
         setOrganizing(false);
       }
     });
   };
 
-  const executeCleanup = () => {
-    if (!pendingCleanup) return;
-    const { kind, tabIds } = pendingCleanup;
-    setPendingCleanup(null);
-    void run(async () => {
-      const type = kind === 'duplicates' ? ('cleanupDuplicates' as const) : ('cleanupInactive' as const);
-      const r = await sendRequest<{ closed: number; snapshotId: string }>({ type, ...{} });
-      void tabIds;
-      showStatus(r.closed > 0 ? `已关闭 ${r.closed} 个标签（已存快照，可恢复）` : '没有需要清理的标签');
-    });
-  };
-
-  const askCleanup = (kind: PendingCleanup['kind']) => {
-    const ids = kind === 'duplicates'
-      ? cleanupCandidatesFromClusters(findDuplicateTabs(visibleTabs))
-      : findInactiveTabs(visibleTabs);
+  const askCleanup = (kind: PendingCleanup['kind']): void => {
+    const ids =
+      kind === 'duplicates'
+        ? cleanupCandidatesFromClusters(findDuplicateTabs(visibleTabs))
+        : findInactiveTabs(visibleTabs);
     if (ids.length === 0) {
-      showStatus('没有可清理的标签', true);
+      showStatus(t('statusNothingToClean'), true);
       return;
     }
     setPendingCleanup({ kind, tabIds: ids });
+  };
+
+  const executeCleanup = (): void => {
+    if (!pendingCleanup) return;
+    const type = pendingCleanup.kind === 'duplicates' ? ('cleanupDuplicates' as const) : ('cleanupInactive' as const);
+    setPendingCleanup(null);
+    void run(async () => {
+      const r = await sendRequest<{ closed: number; snapshotId: string }>({ type });
+      showStatus(
+        r.closed > 0 ? t('statusCleanedWithSnapshot', { count: r.closed }) : t('statusNothingToClean'),
+      );
+    });
   };
 
   // ---------- 渲染 ----------
@@ -233,28 +285,28 @@ export default function App() {
       {/* 头部 */}
       <header className="border-b border-neutral-800 px-3 py-2">
         <div className="flex items-center justify-between">
-          <h1 className="text-sm font-semibold tracking-tight">AI Tab Organizer</h1>
+          <h1 className="text-sm font-semibold tracking-tight">{t('appName')}</h1>
           <div className="flex items-center gap-1 text-xs">
             <button
               type="button"
               className={`${toolbarBtn} ${viewMode === 'flat' ? '!border-emerald-700 !text-emerald-400' : ''}`}
               onClick={() => setViewMode('flat')}
             >
-              列表
+              {t('viewFlat')}
             </button>
             <button
               type="button"
               className={`${toolbarBtn} ${viewMode === 'domain' ? '!border-emerald-700 !text-emerald-400' : ''}`}
               onClick={() => setViewMode('domain')}
             >
-              域名
+              {t('viewDomain')}
             </button>
           </div>
         </div>
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="搜索标题或网址…"
+          placeholder={t('searchPlaceholder')}
           className="mt-2 w-full rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-1.5 text-sm outline-none placeholder:text-neutral-600 focus:border-emerald-700"
         />
         <div className="mt-2 flex flex-wrap gap-1.5">
@@ -264,48 +316,58 @@ export default function App() {
             onClick={organizeByLlm}
             className="rounded-md bg-emerald-700 px-3 py-1 text-xs font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-50"
           >
-            {organizing ? 'AI 整理中…' : '✨ AI 整理'}
+            {organizing ? t('aiOrganizing') : t('aiOrganize')}
           </button>
-          <button type="button" className={toolbarBtn} onClick={groupByDomain}>按域名分组</button>
-          <button type="button" className={toolbarBtn} onClick={groupByRules}>按类别分组</button>
-          <button type="button" className={toolbarBtn} onClick={sortByDomain}>域名排序</button>
+          <button type="button" className={toolbarBtn} onClick={groupByDomain}>
+            {t('groupByDomain')}
+          </button>
+          <button type="button" className={toolbarBtn} onClick={groupByRules}>
+            {t('groupByCategory')}
+          </button>
+          <button type="button" className={toolbarBtn} onClick={sortByDomain}>
+            {t('sortByDomain')}
+          </button>
           <button type="button" className={toolbarBtn} onClick={() => askCleanup('duplicates')}>
-            清理重复{duplicateCount > 0 ? `(${duplicateCount})` : ''}
+            {t('cleanupDuplicates')}
+            {duplicateCount > 0 ? `(${duplicateCount})` : ''}
           </button>
           <button type="button" className={toolbarBtn} onClick={() => askCleanup('inactive')}>
-            清理非活跃{inactiveCount > 0 ? `(${inactiveCount})` : ''}
+            {t('cleanupInactive')}
+            {inactiveCount > 0 ? `(${inactiveCount})` : ''}
           </button>
-          <button type="button" className={toolbarBtn} onClick={() => setShowSnapshotModal(true)}>快照</button>
+          <button type="button" className={toolbarBtn} onClick={() => setShowSnapshotModal(true)}>
+            {t('snapshots')}
+          </button>
         </div>
       </header>
 
       {/* 两步确认条 */}
       {pendingCleanup && (
         <div className="flex items-center gap-2 border-b border-amber-900/60 bg-amber-950/40 px-3 py-2 text-xs text-amber-200">
-          <span className="flex-1">将关闭 {pendingCleanup.tabIds.length} 个标签（先自动存快照）</span>
+          <span className="flex-1">{t('confirmCloseN', { count: pendingCleanup.tabIds.length })}</span>
           <button
             type="button"
             className="rounded bg-amber-700 px-2 py-1 font-medium text-white hover:bg-amber-600"
             onClick={executeCleanup}
           >
-            确认关闭
+            {t('confirmClose')}
           </button>
           <button
             type="button"
             className="rounded px-2 py-1 text-amber-300 hover:bg-neutral-800"
             onClick={() => setPendingCleanup(null)}
           >
-            取消
+            {t('cancel')}
           </button>
         </div>
       )}
 
       {/* 列表 */}
       <main className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
-        {!loaded && <p className="p-4 text-sm text-neutral-500">加载中…</p>}
+        {!loaded && <p className="p-4 text-sm text-neutral-500">{t('loading')}</p>}
         {loaded && visibleTabs.length === 0 && (
           <p className="p-4 text-center text-sm text-neutral-500">
-            {search ? '没有匹配的标签' : '当前窗口没有标签'}
+            {search ? t('noMatchingTabs') : t('noTabs')}
           </p>
         )}
 
@@ -315,6 +377,7 @@ export default function App() {
               key={tab.id}
               tab={tab}
               checked={selected.has(tab.id)}
+              t={t}
               onToggleChecked={toggleChecked}
               onActivate={activate}
               onClose={closeOne}
@@ -350,6 +413,7 @@ export default function App() {
                       key={tab.id}
                       tab={tab}
                       checked={selected.has(tab.id)}
+                      t={t}
                       onToggleChecked={toggleChecked}
                       onActivate={activate}
                       onClose={closeOne}
@@ -365,15 +429,27 @@ export default function App() {
       {/* 批量操作条 */}
       {selected.size > 0 && (
         <div className="flex flex-wrap items-center gap-1.5 border-t border-neutral-800 bg-neutral-900 px-3 py-2 text-xs">
-          <span className="mr-auto text-neutral-400">已选 {selected.size}</span>
+          <span className="mr-auto text-neutral-400">{t('selectedCount', { count: selected.size })}</span>
           {groupTitleInput === null ? (
             <>
-              <button type="button" className={toolbarBtn} onClick={() => bulkAction('closeTabs')}>关闭</button>
-              <button type="button" className={toolbarBtn} onClick={() => bulkAction('setPinned', { pinned: true })}>固定</button>
-              <button type="button" className={toolbarBtn} onClick={() => bulkAction('setPinned', { pinned: false })}>取消固定</button>
-              <button type="button" className={toolbarBtn} onClick={() => bulkAction('setMuted', { muted: true })}>静音</button>
-              <button type="button" className={toolbarBtn} onClick={() => setGroupTitleInput('')}>建组…</button>
-              <button type="button" className={toolbarBtn} onClick={() => setSelected(new Set())}>取消选择</button>
+              <button type="button" className={toolbarBtn} onClick={() => bulkAction('closeTabs')}>
+                {t('bulkClose')}
+              </button>
+              <button type="button" className={toolbarBtn} onClick={() => bulkAction('setPinned', { pinned: true })}>
+                {t('pin')}
+              </button>
+              <button type="button" className={toolbarBtn} onClick={() => bulkAction('setPinned', { pinned: false })}>
+                {t('unpin')}
+              </button>
+              <button type="button" className={toolbarBtn} onClick={() => bulkAction('setMuted', { muted: true })}>
+                {t('mute')}
+              </button>
+              <button type="button" className={toolbarBtn} onClick={() => setGroupTitleInput('')}>
+                {t('groupDots')}
+              </button>
+              <button type="button" className={toolbarBtn} onClick={() => setSelected(new Set())}>
+                {t('clearSelection')}
+              </button>
             </>
           ) : (
             <>
@@ -385,13 +461,19 @@ export default function App() {
                   if (e.key === 'Enter') createGroupFromSelection();
                   if (e.key === 'Escape') setGroupTitleInput(null);
                 }}
-                placeholder="分组名称，回车确认"
+                placeholder={t('groupNamePlaceholder')}
                 className="min-w-0 flex-1 rounded border border-neutral-700 bg-neutral-950 px-2 py-1 outline-none focus:border-emerald-700"
               />
-              <button type="button" className={toolbarBtn + ' !border-emerald-700 !text-emerald-400'} onClick={createGroupFromSelection}>
-                创建
+              <button
+                type="button"
+                className={toolbarBtn + ' !border-emerald-700 !text-emerald-400'}
+                onClick={createGroupFromSelection}
+              >
+                {t('create')}
               </button>
-              <button type="button" className={toolbarBtn} onClick={() => setGroupTitleInput(null)}>取消</button>
+              <button type="button" className={toolbarBtn} onClick={() => setGroupTitleInput(null)}>
+                {t('cancel')}
+              </button>
             </>
           )}
         </div>
@@ -399,15 +481,34 @@ export default function App() {
 
       {/* 底部状态 */}
       <footer className="flex items-center justify-between border-t border-neutral-800 px-3 py-1.5 text-[11px] text-neutral-500">
-        <span>{tabs.length} 个标签</span>
+        <span>{t('tabCount', { count: tabs.length })}</span>
         {status && <span className={status.bad ? 'text-red-400' : 'text-emerald-400'}>{status.text}</span>}
       </footer>
 
       {showSnapshotModal && (
         <SnapshotModal
+          t={t}
           onClose={() => setShowSnapshotModal(false)}
-          onRestored={(opened, skipped) => showStatus(`已恢复 ${opened} 个标签，跳过已打开的 ${skipped} 个`)}
+          onRestored={(opened, skipped) => showStatus(t('statusRestored', { opened, skipped }))}
           onError={(m) => showStatus(m, true)}
+        />
+      )}
+
+      {previewPlan && (
+        <PreviewModal
+          plan={previewPlan}
+          tabs={tabs}
+          categories={categoriesList}
+          t={t}
+          onCancel={() => setPreviewPlan(null)}
+          onApplied={(r) => {
+            setPreviewPlan(null);
+            showStatus(t('statusAiGrouped', { grouped: r.groupedTabs, groups: r.groups }));
+          }}
+          onError={(m) => {
+            setPreviewPlan(null);
+            showStatus(m, true);
+          }}
         />
       )}
     </div>

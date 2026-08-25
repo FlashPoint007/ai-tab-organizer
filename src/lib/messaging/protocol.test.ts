@@ -38,7 +38,11 @@ describe('requestSchema', () => {
 describe('eventSchema / parseEvent', () => {
   it('解析 tabsUpdated 广播', () => {
     const ev = eventSchema.parse({ type: 'tabsUpdated', windowId: 2, tabs: [baseTab] });
-    expect(ev.tabs).toHaveLength(1);
+    if (ev.type === 'tabsUpdated') {
+      expect(ev.tabs).toHaveLength(1);
+    } else {
+      throw new Error('应解析出 tabsUpdated');
+    }
   });
 
   it('parseEvent 对非事件载荷返回 null 而不是抛错', () => {

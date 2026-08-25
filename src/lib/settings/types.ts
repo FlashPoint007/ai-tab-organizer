@@ -29,6 +29,17 @@ export interface BatchConfig {
   timeoutMs: number;
 }
 
+export type UiLanguage = 'zh' | 'en';
+
+export type AutoOrganizeMode = 'off' | 'interval' | 'threshold';
+
+export interface AutoOrganizeConfig {
+  /** off=仅手动；interval=按间隔；threshold=未分组标签达到阈值 */
+  mode: AutoOrganizeMode;
+  intervalMinutes: number;
+  thresholdCount: number;
+}
+
 export interface Settings {
   /** 规则数组顺序即优先级：先匹配先赢 */
   rules: DomainRule[];
@@ -38,6 +49,11 @@ export interface Settings {
   /** M3：LLM 连接配置；null=未配置（AI 整理不可用，走规则兜底） */
   llm: LlmProviderConfig | null;
   llmBatch: BatchConfig;
+  /** M4：AI 整理跳过预览直接生效 */
+  autoApply: boolean;
+  /** M4：自动整理触发器配置（快捷键始终可用，不占此开关） */
+  autoOrganize: AutoOrganizeConfig;
+  language: UiLanguage;
 }
 
 export const DEFAULT_CATEGORIES: readonly string[] = [
@@ -59,4 +75,7 @@ export const DEFAULT_SETTINGS: Settings = {
   minGroupSizeForRules: 1,
   llm: null,
   llmBatch: { size: 30, concurrency: 2, timeoutMs: 30_000 },
+  autoApply: false,
+  autoOrganize: { mode: 'off', intervalMinutes: 30, thresholdCount: 8 },
+  language: 'zh',
 };

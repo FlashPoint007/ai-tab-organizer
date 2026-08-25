@@ -3,7 +3,7 @@ import { browser } from 'wxt/browser';
 
 import { sendRequest } from '@/lib/messaging/client';
 import type { LlmConfigPayload, LlmUsageStats } from '@/lib/messaging/protocol';
-import type { DomainRule } from '@/lib/settings/types';
+import type { AutoOrganizeConfig, DomainRule, UiLanguage } from '@/lib/settings/types';
 import { findPreset, LLM_PRESETS, originFromBaseUrl } from '@/lib/llm/presets';
 
 type RuleMatchType = DomainRule['matchType'];
@@ -32,6 +32,15 @@ export default function App() {
   });
   const [error, setError] = useState<string | null>(null);
 
+  // M4：自动化与界面
+  const [uiLanguage, setUiLanguage] = useState<UiLanguage>('zh');
+  const [autoApplyState, setAutoApplyState] = useState(false);
+  const [autoOrganize, setAutoOrganize] = useState<AutoOrganizeConfig>({
+    mode: 'off',
+    intervalMinutes: 30,
+    thresholdCount: 8,
+  });
+
   // M3：AI 模型配置
   const [llm, setLlm] = useState<LlmFormState | null>(null);
   const [usage, setUsage] = useState<LlmUsageStats | null>(null);
@@ -46,15 +55,21 @@ export default function App() {
   useEffect(() => {
     void (async () => {
       try {
-        const [r, c, u, cfg] = await Promise.all([
+        const [r, c, u, cfg, ui] = await Promise.all([
           sendRequest<DomainRule[]>({ type: 'listRules' }),
           sendRequest<string[]>({ type: 'listCategories' }),
           sendRequest<LlmUsageStats>({ type: 'getLlmUsage' }),
           sendRequest<LlmConfigPayload | null>({ type: 'getLlmConfig' }),
+          sendRequest<{ language: UiLanguage; autoApply: boolean; autoOrganize: AutoOrganizeConfig }>({
+            type: 'getUiSettings',
+          }),
         ]);
         setRules(r);
         setCategories(c);
         setUsage(u);
+        setUiLanguage(ui.language);
+        setAutoApplyState(ui.autoApply);
+        setAutoOrganize(ui.autoOrganize);
         setLlm(
           cfg
             ? {
@@ -89,6 +104,17 @@ export default function App() {
       setCategories(next);
       try {
         await sendRequest({ type: 'saveCategories', categories: next });
+      } catch (e) {
+        fail(e);
+      }
+    },
+    [fail],
+  );
+
+  const saveUi = useCallback(
+    async (patch: { language?: UiLanguage; autoApply?: boolean; autoOrganize?: AutoOrganizeConfig }) => {
+      try {
+        await sendRequest({ type: 'saveUiSettings', ...patch });
       } catch (e) {
         fail(e);
       }
@@ -377,6 +403,95 @@ export default function App() {
             </p>
           )}
         </div>
+      </section>
+
+      {/* 自动整理与界面 */}
+      <section className="mt-8">
+        <h2 className="text-base font-semibold">自动整理与界面</h2>
+
+        <div className="mt-3 flex items-center gap-2">
+          <label className="w-24 shrink-0 text-xs text-neutral-500">界面语言 / Language</label>
+          <select
+            value={uiLanguage}
+            onChange={(e) => {
+              const language = e.target.value as UiLanguage;
+              setUiLanguage(language);
+              void saveUi({ language });
+            }}
+            className={input + ' w-32'}
+          >
+            <option value="zh">中文</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+
+        <div className="mt-3 flex items-center gap-2">
+          <label className="w-24 shrink-0 text-xs text-neutral-500">AI 整理确认</label>
+          <label className="flex items-center gap-1.5 text-xs text-neutral-300">
+            <input
+              type="checkbox"
+              className="accent-emerald-600"
+              checked={autoApplyState}
+              onChange={(e) => {
+                const autoApply = e.target.checked;
+                setAutoApplyState(autoApply);
+                void saveUi({ autoApply });
+              }}
+            />
+            直接生效，跳过预览确认
+          </label>
+        </div>
+
+        <div className="mt-3 flex items-center gap-2">
+          <label className="w-24 shrink-0 text-xs text-neutral-500">自动触发</label>
+          <select
+            value={autoOrganize.mode}
+            onChange={(e) => {
+              const mode = e.target.value as AutoOrganizeConfig['mode'];
+              const next = { ...autoOrganize, mode };
+              setAutoOrganize(next);
+              void saveUi({ autoOrganize: next });
+            }}
+            className={input + ' w-56'}
+          >
+            <option value="off">关闭（仅手动/快捷键）</option>
+            <option value="interval">定时整理</option>
+            <option value="threshold">未分组达到阈值</option>
+          </select>
+          {autoOrganize.mode === 'interval' && (
+            <input
+              type="number"
+              min={5}
+              max={1440}
+              value={autoOrganize.intervalMinutes}
+              onChange={(e) => {
+                const intervalMinutes = Math.max(5, Number(e.target.value) || 30);
+                const next = { ...autoOrganize, intervalMinutes };
+                setAutoOrganize(next);
+                void saveUi({ autoOrganize: next });
+              }}
+              className={input + ' w-28'}
+            />
+          )}
+          {autoOrganize.mode === 'threshold' && (
+            <input
+              type="number"
+              min={2}
+              max={200}
+              value={autoOrganize.thresholdCount}
+              onChange={(e) => {
+                const thresholdCount = Math.max(2, Number(e.target.value) || 8);
+                const next = { ...autoOrganize, thresholdCount };
+                setAutoOrganize(next);
+                void saveUi({ autoOrganize: next });
+              }}
+              className={input + ' w-28'}
+            />
+          )}
+        </div>
+        <p className="mt-2 pl-[6.5rem] text-[11px] text-neutral-600">
+          快捷键 Alt+Shift+O 随时可用（chrome://extensions/shortcuts 可改键）；自动触发仅在已配置 AI 模型时生效。
+        </p>
       </section>
 
       {/* 分类管理 */}

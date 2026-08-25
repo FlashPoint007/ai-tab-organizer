@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 
 import { sendRequest } from '@/lib/messaging/client';
 import type { RequestPayloadMap } from '@/lib/messaging/protocol';
+import type { Translator } from '@/i18n';
 
 interface SnapshotModalProps {
+  t: Translator;
   onClose: () => void;
   onRestored: (opened: number, skipped: number) => void;
   onError: (message: string) => void;
@@ -11,7 +13,7 @@ interface SnapshotModalProps {
 
 type SnapshotItem = RequestPayloadMap['listSnapshots'][number];
 
-export function SnapshotModal({ onClose, onRestored, onError }: SnapshotModalProps) {
+export function SnapshotModal({ t, onClose, onRestored, onError }: SnapshotModalProps) {
   const [items, setItems] = useState<SnapshotItem[] | null>(null);
 
   async function reload(): Promise<void> {
@@ -23,8 +25,8 @@ export function SnapshotModal({ onClose, onRestored, onError }: SnapshotModalPro
   }
 
   useEffect(() => {
-    void reload();
     // 仅在打开弹窗时加载一次；回调 props 每次渲染都是新引用，不进依赖
+    void reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -60,21 +62,19 @@ export function SnapshotModal({ onClose, onRestored, onError }: SnapshotModalPro
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-neutral-100">快照</h2>
+          <h2 className="text-base font-semibold text-neutral-100">{t('snapshotTitle')}</h2>
           <button
             type="button"
             className="rounded px-2 py-1 text-xs text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
             onClick={onClose}
           >
-            关闭
+            {t('closeBtn')}
           </button>
         </div>
 
-        {items === null && <p className="text-sm text-neutral-500">加载中…</p>}
+        {items === null && <p className="text-sm text-neutral-500">{t('loading')}</p>}
         {items !== null && items.length === 0 && (
-          <p className="py-6 text-center text-sm text-neutral-500">
-            还没有快照。清理标签页时会自动创建，也可以手动创建。
-          </p>
+          <p className="py-6 text-center text-sm text-neutral-500">{t('snapshotEmpty')}</p>
         )}
 
         <ul className="space-y-2">
@@ -83,7 +83,8 @@ export function SnapshotModal({ onClose, onRestored, onError }: SnapshotModalPro
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm text-neutral-200">{s.label}</p>
                 <p className="mt-0.5 text-xs text-neutral-500">
-                  {s.count} 个标签 · {new Date(s.createdAt).toLocaleString('zh-CN', { hour12: false })}
+                  {t('snapshotTabsCount', { count: s.count })} ·{' '}
+                  {new Date(s.createdAt).toLocaleString('zh-CN', { hour12: false })}
                 </p>
               </div>
               <button
@@ -91,14 +92,14 @@ export function SnapshotModal({ onClose, onRestored, onError }: SnapshotModalPro
                 className="rounded-md bg-emerald-700 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-600"
                 onClick={() => void restore(s.id)}
               >
-                恢复
+                {t('restore')}
               </button>
               <button
                 type="button"
                 className="rounded-md px-2 py-1 text-xs text-neutral-400 hover:bg-neutral-800 hover:text-red-400"
                 onClick={() => void remove(s.id)}
               >
-                删除
+                {t('remove')}
               </button>
             </li>
           ))}
@@ -118,7 +119,7 @@ export function SnapshotModal({ onClose, onRestored, onError }: SnapshotModalPro
             })();
           }}
         >
-          ＋ 为当前窗口创建快照
+          {t('createSnapshotForWindow')}
         </button>
       </div>
     </div>

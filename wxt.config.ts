@@ -20,6 +20,12 @@ export default defineConfig({
     // 用户配置任意 LLM 端点后，由 Options 页在用户手势里动态申请对应 origin
     // （保持安装时零 host 权限，隐私面最小）
     optional_host_permissions: ['http://*/*', 'https://*/*'],
+    commands: {
+      'organize-tabs': {
+        suggested_key: { default: 'Alt+Shift+O', mac: 'Alt+Shift+O' },
+        description: 'AI 整理当前窗口标签页',
+      },
+    },
   },
   vite: () => ({
     plugins: [tailwindcss()],
