@@ -291,6 +291,8 @@ export default function App() {
         } else {
           // 预览确认流
           const plan = await sendRequest<OrganizePlan>({ type: 'planOrganizeByLlm' });
+          // AI 新归纳的类别并入下拉选项，预览里可以选到
+          setCategoriesList((prev) => [...new Set([...prev, ...plan.newCategories])]);
           setPreviewPlan(plan);
         }
       } finally {
