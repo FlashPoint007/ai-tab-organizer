@@ -108,7 +108,7 @@ interface AdaptiveShape {
   assignments?: unknown;
 }
 
-function sanitizeCategories(input: unknown, max = 8): string[] {
+function sanitizeCategories(input: unknown, max = 15): string[] {
   if (!Array.isArray(input)) return [];
   const seen = new Set<string>();
   for (const item of input) {
@@ -180,7 +180,7 @@ export function parseAdaptiveResult(raw: string, validIds: ReadonlySet<number>):
 }
 
 /** 解析类别归纳结果（{"categories":[...]}），容错同上。 */
-export function parseDiscoveredCategories(raw: string, max = 8): string[] {
+export function parseDiscoveredCategories(raw: string, max = 15): string[] {
   const cleaned = stripFences(raw);
   const candidates: string[] = [cleaned];
   const balanced = extractBalancedJson(cleaned);

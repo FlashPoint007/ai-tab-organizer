@@ -164,8 +164,9 @@ describe('buildAdaptiveClassifyMessages（自适应模式）', () => {
       ['学习资料'],
     );
     const system = messages.at(0)?.content ?? '';
-    expect(system).toContain('3~8 个类别');
-    expect(system).toContain('宁少勿多');
+    expect(system).toContain('4~12 个类别');
+    expect(system).toContain('B站内部平台');
+    expect(system).toContain('至多 15 个');
     expect(system).toContain('学习资料');
     expect(system).toContain('categories');
     expect(system).toContain('忽略');
@@ -190,9 +191,9 @@ describe('parseAdaptiveResult', () => {
     expect(got.assignments).toEqual([{ id: 1, category: '前端开发' }]);
   });
 
-  it('围栏容错照常；类别去重且上限 8 个', () => {
-    const cats = JSON.stringify({ categories: Array.from({ length: 12 }, (_, i) => '类' + i) });
-    expect(parseAdaptiveResult(cats, validIds).categories.length).toBe(8);
+  it('围栏容错照常；类别去重且上限 15 个', () => {
+    const cats = JSON.stringify({ categories: Array.from({ length: 20 }, (_, i) => '类' + i) });
+    expect(parseAdaptiveResult(cats, validIds).categories.length).toBe(15);
     const fenced = '答案：\n```json\n{"categories":["A"],"assignments":[{"id":2,"category":"A"}]}\n```';
     expect(parseAdaptiveResult(fenced, validIds).assignments).toEqual([{ id: 2, category: 'A' }]);
   });
