@@ -231,11 +231,11 @@
 - [x] i18n zh/en 全界面覆盖 + 语言切换即时生效（settingsChanged 广播）；暗色为默认主题；空态/错误态齐备
 - 验收：语言切换即时生效 ✓（Options 切换 → 广播 → 面板即时换语言）；快捷键/定时/阈值实测见附录 A
 
-### M5 发布准备（0.5–1 天）
-- [ ] wxt zip 产出商店包；图标/截图/商店文案
-- [ ] Firefox 目标编译验证
-- [ ] README 完整文档 + local-model-guide.md
-- 验收：Chrome Web Store 开发者后台上传通过自动审核项
+### M5 发布准备（0.5–1 天）✅ 已完成
+- [x] wxt zip 产出商店包（132KB，含图标）；图标由 scripts/generate-icons.mjs 零依赖生成（public/icon/ 约定自动登记 manifest.icons）
+- [x] Firefox 目标编译验证（WXT 自动降为 MV2 事件页，产物 .output/firefox-mv2）
+- [x] README 完整文档 + local-model-guide.md + store-listing.md（商店文案/权限说明/隐私要点）
+- 验收：zip 产物结构完整；实际提交 Chrome Web Store 需开发者账号人工操作
 
 ### 测试策略（贯穿全程）
 - lib 层纯函数单测 ≥80%（Vitest）：parser/rules/cache/prompt 组装/消息协议
@@ -308,3 +308,16 @@
 - UI：Side Panel 新增「✨ AI 整理」主按钮（整理中禁用+进度文案）；Options 新增 AI 模型区（8 家预设一键填充/baseUrl/model/key/温度/授权保存/测试连接/用量清零）
 - 质量：70 单测全绿（新增 17 个），lint 0 错 0 警，构建 407.2 KB
 - **待人工验收**：① DeepSeek 真实 key 实测分对率 ② Ollama qwen2.5:3b 全流程 ③ 标题藏指令样例不破坏 JSON 结构 ④ 断网时观察状态栏降级提示
+
+### M4（已完成）
+- 管线拆分：computeOrganizePlan（只算方案）+ applyCategoryPlan（落分组）；organizeTabsByLlm 保留两段连跑供自动触发
+- 触发器三件套：commands 快捷键（Alt+Shift+O，始终可用）/ alarms 定时（settings 变更即同步闹钟）/ 新标签阈值（30s 合并检查 + 15min 冷却，session 存储冷却时间戳）
+- PreviewModal：方案按类别分区、逐条勾选/改类别、统计行；autoApply=true 时面板直接走旧单段路径
+- i18n：src/i18n 单文件双字典 + makeTranslator；saveUiSettings 广播 settingsChanged，面板即时换语言；73 单测全绿
+
+### M5（已完成）
+- 图标：scripts/generate-icons.mjs 零依赖生成（手写 PNG 编码器：zlib+CRC32；emerald 渐变圆角底+三条白色标签条）；放 public/icon/ 由 WXT 自动登记 manifest.icons
+- 打包：pnpm zip → .output/ai-tab-organizer-0.1.0-chrome.zip（132KB）
+- Firefox：wxt build -b firefox 编译通过（自动降级 MV2 事件页；sidePanel 权限由 WXT 按目标裁剪）
+- 文档：local-model-guide.md（Ollama/LM Studio 步骤+模型建议+FAQ）、store-listing.md（商店文案/权限说明/隐私政策要点）
+- 全项目最终状态：73 单测 / lint 0错0警 / Chrome MV3 431KB / Firefox MV2 429KB / 商店 zip 132KB
