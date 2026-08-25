@@ -317,6 +317,7 @@ async function dispatch(req: Request): Promise<unknown> {
         language: settings.language,
         autoApply: settings.autoApply,
         realtime: settings.realtime,
+        minGroupSizeForRules: settings.minGroupSizeForRules,
         autoOrganize: settings.autoOrganize,
       };
     }
@@ -328,6 +329,9 @@ async function dispatch(req: Request): Promise<unknown> {
         ...(req.language !== undefined ? { language: req.language } : {}),
         ...(req.autoApply !== undefined ? { autoApply: req.autoApply } : {}),
         ...(req.realtime !== undefined ? { realtime: req.realtime } : {}),
+        ...(req.minGroupSizeForRules !== undefined
+          ? { minGroupSizeForRules: req.minGroupSizeForRules }
+          : {}),
         ...(req.autoOrganize !== undefined ? { autoOrganize: req.autoOrganize } : {}),
       };
       await saveSettings(next, localKV);

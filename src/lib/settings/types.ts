@@ -74,7 +74,8 @@ export const DEFAULT_CATEGORIES: readonly string[] = [
 export const DEFAULT_SETTINGS: Settings = {
   rules: [],
   categories: [...DEFAULT_CATEGORIES],
-  minGroupSizeForRules: 1,
+  // 2 起步：单标签类别不建 Chrome 组，避免标签栏被一堆单标签组的名字挤爆
+  minGroupSizeForRules: 2,
   llm: null,
   llmBatch: { size: 30, concurrency: 2, timeoutMs: 30_000 },
   autoApply: false,

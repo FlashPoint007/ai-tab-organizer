@@ -152,6 +152,7 @@ export const requestSchema = z.discriminatedUnion('type', [
     language: z.enum(['zh', 'en']).optional(),
     autoApply: z.boolean().optional(),
     realtime: z.boolean().optional(),
+    minGroupSizeForRules: z.number().int().min(2).max(50).optional(),
     autoOrganize: z
       .object({
         mode: z.enum(['off', 'interval', 'threshold']),
@@ -208,7 +209,7 @@ export type RequestPayloadMap = {
   clearCategoryCache: null;
   planOrganizeByLlm: OrganizePlan;
   applyCategoryPlan: { groups: number; groupedTabs: number };
-  getUiSettings: { language: 'zh' | 'en'; autoApply: boolean; realtime: boolean; autoOrganize: {
+  getUiSettings: { language: 'zh' | 'en'; autoApply: boolean; realtime: boolean; minGroupSizeForRules: number; autoOrganize: {
     mode: 'off' | 'interval' | 'threshold';
     intervalMinutes: number;
     thresholdCount: number;

@@ -37,6 +37,7 @@ export default function App() {
   const [uiLanguage, setUiLanguage] = useState<UiLanguage>('zh');
   const [autoApplyState, setAutoApplyState] = useState(false);
   const [realtimeState, setRealtimeState] = useState(true);
+  const [minGroupSize, setMinGroupSize] = useState(2);
   const [autoOrganize, setAutoOrganize] = useState<AutoOrganizeConfig>({
     mode: 'off',
     intervalMinutes: 30,
@@ -66,6 +67,7 @@ export default function App() {
             language: UiLanguage;
             autoApply: boolean;
             realtime: boolean;
+            minGroupSizeForRules: number;
             autoOrganize: AutoOrganizeConfig;
           }>({ type: 'getUiSettings' }),
         ]);
@@ -75,6 +77,7 @@ export default function App() {
         setUiLanguage(ui.language);
         setAutoApplyState(ui.autoApply);
         setRealtimeState(ui.realtime);
+        setMinGroupSize(ui.minGroupSizeForRules);
         setAutoOrganize(ui.autoOrganize);
         setLlm(
           cfg
@@ -122,6 +125,7 @@ export default function App() {
       language?: UiLanguage;
       autoApply?: boolean;
       realtime?: boolean;
+      minGroupSizeForRules?: number;
       autoOrganize?: AutoOrganizeConfig;
     }) => {
       try {
@@ -594,6 +598,25 @@ export default function App() {
             />
             新标签打开后自动归类入组（缓存/规则优先，必要时单条 AI 请求）
           </label>
+        </div>
+
+        <div className="mt-3 flex items-center gap-2">
+          <label className="w-24 shrink-0 text-xs text-neutral-500">成组门槛</label>
+          <input
+            type="number"
+            min={2}
+            max={50}
+            value={minGroupSize}
+            onChange={(e) => {
+              const minGroupSizeForRules = Math.max(2, Number(e.target.value) || 2);
+              setMinGroupSize(minGroupSizeForRules);
+              void saveUi({ minGroupSizeForRules });
+            }}
+            className={input + ' w-28'}
+          />
+          <span className="text-[11px] text-neutral-600">
+            同类别标签数达到该值才建 Chrome 标签组（2 = 单标签不建组，避免标签栏拥挤）
+          </span>
         </div>
 
         <div className="mt-3 flex items-center gap-2">

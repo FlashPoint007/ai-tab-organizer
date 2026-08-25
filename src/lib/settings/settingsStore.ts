@@ -24,8 +24,8 @@ export async function loadSettings(kv: KVStorage): Promise<Settings> {
         ? [...stored.categories]
         : [...DEFAULT_SETTINGS.categories],
     minGroupSizeForRules:
-      typeof stored.minGroupSizeForRules === 'number' && stored.minGroupSizeForRules >= 1
-        ? stored.minGroupSizeForRules
+      typeof stored.minGroupSizeForRules === 'number'
+        ? Math.max(2, stored.minGroupSizeForRules)
         : DEFAULT_SETTINGS.minGroupSizeForRules,
     llm: stored.llm && typeof stored.llm.baseUrl === 'string' && typeof stored.llm.model === 'string'
       ? stored.llm
