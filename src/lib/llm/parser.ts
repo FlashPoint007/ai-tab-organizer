@@ -97,3 +97,111 @@ export function parseAssignments(
   }
   return result;
 }
+
+export interface AdaptiveParseResult {
+  categories: string[];
+  assignments: ParsedAssignment[];
+}
+
+interface AdaptiveShape {
+  categories?: unknown;
+  assignments?: unknown;
+}
+
+function sanitizeCategories(input: unknown, max = 8): string[] {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set<string>();
+  for (const item of input) {
+    if (typeof item !== 'string') continue;
+    const trimmed = item.trim();
+    if (!trimmed || trimmed.length > 30) continue;
+    seen.add(trimmed);
+    if (seen.size >= max) break;
+  }
+  return [...seen];
+}
+
+/**
+ * 解析自适应分类结果（{"categories":[...],"assignments":[...]}）。
+ * assignments 的类别严格校验为模型自己给出的 categories；
+ * 整体解析失败时降级为正则逐对提取（类别集合同样来自解析出的 categories）。
+ */
+export function parseAdaptiveResult(raw: string, validIds: ReadonlySet<number>): AdaptiveParseResult {
+  const cleaned = stripFences(raw);
+
+  let categories: string[] = [];
+  let rawAssignments: unknown = null;
+
+  const candidates: string[] = [cleaned];
+  const balanced = extractBalancedJson(cleaned);
+  if (balanced) candidates.unshift(balanced);
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate) as AdaptiveShape;
+      categories = sanitizeCategories(parsed.categories);
+      if (parsed.assignments !== undefined || categories.length > 0) {
+        rawAssignments = parsed.assignments ?? null;
+        break;
+      }
+    } catch {
+      // 继续降级
+    }
+  }
+
+  const categorySet = new Set(categories);
+  const assignments: ParsedAssignment[] = [];
+  const seenIds = new Set<number>();
+
+  const pushIfValid = (id: unknown, category: unknown): void => {
+    if (typeof id !== 'number' || typeof category !== 'string') return;
+    if (!validIds.has(id) || seenIds.has(id)) return;
+    const trimmed = category.trim();
+    if (!categorySet.has(trimmed)) return;
+    seenIds.add(id);
+    assignments.push({ id, category: trimmed });
+  };
+
+  if (Array.isArray(rawAssignments)) {
+    for (const item of rawAssignments) {
+      const a = item as { id?: unknown; category?: unknown };
+      pushIfValid(a?.id, a?.category);
+    }
+  }
+  if (assignments.length === 0) {
+    PAIR_REGEX.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = PAIR_REGEX.exec(cleaned)) !== null) {
+      pushIfValid(Number(m[1]), m[2]);
+    }
+  }
+
+  return { categories, assignments };
+}
+
+/** 解析类别归纳结果（{"categories":[...]}），容错同上。 */
+export function parseDiscoveredCategories(raw: string, max = 8): string[] {
+  const cleaned = stripFences(raw);
+  const candidates: string[] = [cleaned];
+  const balanced = extractBalancedJson(cleaned);
+  if (balanced) candidates.unshift(balanced);
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate) as AdaptiveShape;
+      const cats = sanitizeCategories(parsed.categories, max);
+      if (cats.length > 0) return cats;
+    } catch {
+      // 继续
+    }
+  }
+  // 最后兜底：抓取「categories":[...] 数组里的字符串
+  const arrayMatch = cleaned.match(/"categories"\s*:\s*(\[[^\]]*\])/);
+  if (arrayMatch?.[1]) {
+    try {
+      return sanitizeCategories(JSON.parse(arrayMatch[1]), max);
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}

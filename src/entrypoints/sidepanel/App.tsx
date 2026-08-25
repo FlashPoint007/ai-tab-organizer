@@ -18,7 +18,7 @@ import type { TabMeta } from '@/lib/types';
 import type { UiLanguage } from '@/lib/settings/types';
 import { makeTranslator } from '@/i18n';
 
-type ViewMode = 'flat' | 'domain';
+type ViewMode = 'flat' | 'domain' | 'category';
 
 interface PendingCleanup {
   kind: 'duplicates' | 'inactive';
@@ -42,6 +42,7 @@ export default function App() {
   const [autoApply, setAutoApply] = useState(false);
   const [categoriesList, setCategoriesList] = useState<string[]>([]);
   const [organizing, setOrganizing] = useState(false);
+  const [groupNames, setGroupNames] = useState<Record<number, string>>({});
 
   const ownWindowIdRef = useRef<number | undefined>(undefined);
   const statusTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -104,6 +105,31 @@ export default function App() {
     });
   }, [tabs]);
 
+  // 分类视图：查询标签组名（只查缺失的，避免循环刷新）
+  const fetchedGroupIds = useRef<Set<number>>(new Set());
+  useEffect(() => {
+    if (viewMode !== 'category') return;
+    const missing = [
+      ...new Set(
+        tabs.filter((tab) => tab.groupId !== -1 && !fetchedGroupIds.current.has(tab.groupId)).map((tab) => tab.groupId),
+      ),
+    ];
+    if (missing.length === 0) return;
+    for (const id of missing) fetchedGroupIds.current.add(id);
+    void (async () => {
+      const updates: Record<number, string> = {};
+      for (const id of missing) {
+        try {
+          const group = await browser.tabGroups.get(id);
+          updates[id] = group.title || t('unnamedGroup');
+        } catch {
+          updates[id] = t('unnamedGroup');
+        }
+      }
+      setGroupNames((prev) => ({ ...prev, ...updates }));
+    })();
+  }, [viewMode, tabs, t]);
+
   // ---------- 派生数据 ----------
   const visibleTabs = useMemo(() => filterTabs(tabs, search), [tabs, search]);
 
@@ -112,6 +138,21 @@ export default function App() {
     [visibleTabs],
   );
   const inactiveCount = useMemo(() => findInactiveTabs(visibleTabs).length, [visibleTabs]);
+
+  const categorySections = useMemo(() => {
+    if (viewMode !== 'category') return [];
+    const byGroup = new Map<string, TabMeta[]>();
+    for (const tab of visibleTabs) {
+      const label =
+        tab.groupId === -1 ? t('ungroupedTabs') : (groupNames[tab.groupId] ?? t('unnamedGroup'));
+      const bucket = byGroup.get(label);
+      if (bucket) bucket.push(tab);
+      else byGroup.set(label, [tab]);
+    }
+    return [...byGroup.entries()]
+      .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+      .map(([label, list]) => ({ key: label, label, tabs: list }));
+  }, [viewMode, visibleTabs, groupNames, t]);
 
   const domainSections = useMemo(() => {
     if (viewMode !== 'domain') return [];
@@ -232,6 +273,7 @@ export default function App() {
             ruleFallback: number;
             batchesFailed: number;
             totalTokens: number;
+            newCategories: string[];
           }>({ type: 'organizeByLlm' });
           const parts = [
             t('statusAiGrouped', { grouped: r.groupedTabs, groups: r.groups }),
@@ -240,7 +282,12 @@ export default function App() {
             r.ruleFallback > 0 ? t('statusRuleFallback', { count: r.ruleFallback }) : '',
             r.batchesFailed > 0 ? t('statusBatchesDegraded', { count: r.batchesFailed }) : '',
           ].filter(Boolean);
+          if (r.newCategories.length > 0) {
+            parts.push(t('statusNewCategories', { count: r.newCategories.length, names: r.newCategories.join('、') }));
+          }
           showStatus(parts.join('，'));
+          // 侧边栏同步：切到分类视图
+          setViewMode('category');
         } else {
           // 预览确认流
           const plan = await sendRequest<OrganizePlan>({ type: 'planOrganizeByLlm' });
@@ -300,6 +347,13 @@ export default function App() {
               onClick={() => setViewMode('domain')}
             >
               {t('viewDomain')}
+            </button>
+            <button
+              type="button"
+              className={`${toolbarBtn} ${viewMode === 'category' ? '!border-emerald-700 !text-emerald-400' : ''}`}
+              onClick={() => setViewMode('category')}
+            >
+              {t('viewCategory')}
             </button>
           </div>
         </div>
@@ -424,6 +478,46 @@ export default function App() {
               </section>
             );
           })}
+
+        {viewMode === 'category' &&
+          categorySections.map((section) => {
+            const collapsed = collapsedDomains.has('cat:' + section.key);
+            return (
+              <section key={section.key} className="mb-2">
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-1.5 rounded px-2 py-1 text-xs text-emerald-400/80 hover:bg-neutral-900 hover:text-emerald-300"
+                  onClick={() =>
+                    setCollapsedDomains((prev) => {
+                      const next = new Set(prev);
+                      const key = 'cat:' + section.key;
+                      if (next.has(key)) next.delete(key);
+                      else next.add(key);
+                      return next;
+                    })
+                  }
+                >
+                  <span>{collapsed ? '▸' : '▾'}</span>
+                  <span className="truncate font-medium">{section.label}</span>
+                  <span className="text-neutral-600">{section.tabs.length}</span>
+                </button>
+                {!collapsed &&
+                  section.tabs.map((tab) => (
+                    <TabRow
+                      key={tab.id}
+                      tab={tab}
+                      checked={selected.has(tab.id)}
+                      t={t}
+                      onToggleChecked={toggleChecked}
+                      onActivate={activate}
+                      onClose={closeOne}
+                      onTogglePin={togglePin}
+                      onToggleMute={toggleMute}
+                    />
+                  ))}
+              </section>
+            );
+          })}
       </main>
 
       {/* 批量操作条 */}
@@ -502,8 +596,17 @@ export default function App() {
           t={t}
           onCancel={() => setPreviewPlan(null)}
           onApplied={(r) => {
+            const fresh = previewPlan?.newCategories ?? [];
             setPreviewPlan(null);
-            showStatus(t('statusAiGrouped', { grouped: r.groupedTabs, groups: r.groups }));
+            // 侧边栏同步：切到分类视图
+            setViewMode('category');
+            const parts = [
+              t('statusAiGrouped', { grouped: r.groupedTabs, groups: r.groups }),
+              fresh.length > 0
+                ? t('statusNewCategories', { count: fresh.length, names: fresh.join('、') })
+                : '',
+            ].filter(Boolean);
+            showStatus(parts.join('，'));
           }}
           onError={(m) => {
             setPreviewPlan(null);

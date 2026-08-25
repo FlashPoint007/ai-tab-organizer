@@ -5,13 +5,21 @@
  * - organizeTabsByLlm：两段连跑（自动触发器/跳过预览时使用）
  */
 import { createLlmClient, LlmError } from '../llm/client';
-import { buildClassifyMessages } from '../llm/prompts';
-import { parseAssignments } from '../llm/parser';
+import {
+  buildAdaptiveClassifyMessages,
+  buildCategoryDiscoveryMessages,
+  buildClassifyMessages,
+} from '../llm/prompts';
+import {
+  parseAdaptiveResult,
+  parseAssignments,
+  parseDiscoveredCategories,
+} from '../llm/parser';
 import { applyRules, colorForCategory, computeCategoryGroups } from '../organizer/rules';
 import { isWebUrl } from '../organizer/domains';
 import { createTabGroup, ungroupAllUngroupedTabsInWindow } from '../browser/groupsWrap';
 import { getWindowTabsMeta } from '../browser/tabsWrap';
-import { loadSettings } from '../settings/settingsStore';
+import { loadSettings, saveSettings } from '../settings/settingsStore';
 import { localKV } from '../storage/browserKv';
 import type { KVStorage } from '../storage/kv';
 import {
@@ -106,53 +114,117 @@ export async function computeOrganizePlan(windowId: number): Promise<OrganizePla
     }
   }
 
-  // ---- 第二遍：批量并发调 LLM；单批失败降级规则 ----
-  const validCategories = new Set(settings.categories);
+  // ---- 第二遍：自适应分类（先归纳类别再分配）；失败批次降级规则 ----
   let requests = 0;
   let totalTokens = 0;
   let batchesFailed = 0;
   let llmAssigned = 0;
   const ruleFallbackIds = new Set<number>();
+  const newCategories: string[] = [];
 
   const batchSize = Math.max(1, settings.llmBatch.size);
   const concurrency = Math.max(1, settings.llmBatch.concurrency);
-  const chunks = chunk(misses, batchSize);
 
-  let cursor = 0;
-  async function worker(): Promise<void> {
-    while (cursor < chunks.length) {
-      const mine = chunks[cursor];
-      cursor += 1;
-      if (!mine) return;
+  /** 把模型新归纳的类别并入用户清单（预览下拉、规则编辑器即可选用）。 */
+  async function mergeNewCategories(candidates: string[]): Promise<void> {
+    const fresh = candidates.filter((c) => !settings.categories.includes(c));
+    if (fresh.length === 0) return;
+    newCategories.push(...fresh);
+    settings.categories = [...settings.categories, ...fresh];
+    await saveSettings(settings, localKV);
+  }
 
-      try {
-        const result = await client.chat(
-          buildClassifyMessages(
-            settings.categories,
-            mine.map((t) => ({ id: t.id, title: t.title, url: t.url })),
-          ),
-          { timeoutMs: settings.llmBatch.timeoutMs },
-        );
-        requests += 1;
-        totalTokens += result.usage?.totalTokens ?? 0;
+  if (misses.length > 0 && misses.length <= batchSize) {
+    // ---- 自适应单请求：归纳 + 分配一体（覆盖绝大多数场景） ----
+    try {
+      const result = await client.chat(
+        buildAdaptiveClassifyMessages(
+          misses.map((t) => ({ id: t.id, title: t.title, url: t.url })),
+          settings.categories,
+        ),
+        { timeoutMs: settings.llmBatch.timeoutMs },
+      );
+      requests += 1;
+      totalTokens += result.usage?.totalTokens ?? 0;
 
-        const parsed = parseAssignments(result.content, new Set(mine.map((t) => t.id)), validCategories);
-        for (const a of parsed) {
-          assignments.set(a.id, a.category);
-          llmAssigned += 1;
-          const source = mine.find((t) => t.id === a.id);
-          if (source) {
-            const key = await cacheKeyFor(source.url);
-            if (key) await putCachedCategory(localKV, key, a.category, Date.now());
-          }
+      const adaptive = parseAdaptiveResult(result.content, new Set(misses.map((t) => t.id)));
+      await mergeNewCategories(adaptive.categories);
+
+      for (const a of adaptive.assignments) {
+        assignments.set(a.id, a.category);
+        llmAssigned += 1;
+        const source = misses.find((t) => t.id === a.id);
+        if (source) {
+          const key = await cacheKeyFor(source.url);
+          if (key) await putCachedCategory(localKV, key, a.category, Date.now());
         }
-      } catch {
-        batchesFailed += 1;
-        for (const t of mine) ruleFallbackIds.add(t.id);
+      }
+    } catch {
+      batchesFailed += 1;
+      for (const t of misses) ruleFallbackIds.add(t.id);
+    }
+  } else if (misses.length > batchSize) {
+    // ---- 两阶段：先归纳类别（一次），再按类别清单分批并发分配 ----
+    let discovered: string[] = [];
+    try {
+      const result = await client.chat(
+        buildCategoryDiscoveryMessages(
+          misses.map((t) => ({ id: t.id, title: t.title, url: t.url })),
+        ),
+        { timeoutMs: settings.llmBatch.timeoutMs },
+      );
+      requests += 1;
+      totalTokens += result.usage?.totalTokens ?? 0;
+      discovered = parseDiscoveredCategories(result.content);
+      await mergeNewCategories(discovered);
+    } catch {
+      batchesFailed += 1;
+      for (const t of misses) ruleFallbackIds.add(t.id);
+    }
+
+    // 归纳失败时回落到用户类别清单，保证仍有产出
+    const activeCategories = discovered.length > 0 ? discovered : settings.categories;
+    const validCategories = new Set(activeCategories);
+    const chunks = chunk(misses, batchSize);
+
+    let cursor = 0;
+    async function worker(): Promise<void> {
+      while (cursor < chunks.length) {
+        const mine = chunks[cursor];
+        cursor += 1;
+        if (!mine) return;
+
+        try {
+          const result = await client.chat(
+            buildClassifyMessages(
+              activeCategories,
+              mine.map((t) => ({ id: t.id, title: t.title, url: t.url })),
+            ),
+            { timeoutMs: settings.llmBatch.timeoutMs },
+          );
+          requests += 1;
+          totalTokens += result.usage?.totalTokens ?? 0;
+
+          const parsed = parseAssignments(result.content, new Set(mine.map((t) => t.id)), validCategories);
+          for (const a of parsed) {
+            assignments.set(a.id, a.category);
+            llmAssigned += 1;
+            const source = mine.find((t) => t.id === a.id);
+            if (source) {
+              const key = await cacheKeyFor(source.url);
+              if (key) await putCachedCategory(localKV, key, a.category, Date.now());
+            }
+          }
+        } catch {
+          batchesFailed += 1;
+          for (const t of mine) ruleFallbackIds.add(t.id);
+        }
       }
     }
+    await Promise.all(
+      Array.from({ length: Math.min(concurrency, Math.max(chunks.length, 1)) }, () => worker()),
+    );
   }
-  await Promise.all(Array.from({ length: Math.min(concurrency, Math.max(chunks.length, 1)) }, () => worker()));
 
   // ---- 规则兜底 ----
   let ruleFallback = 0;
@@ -182,6 +254,7 @@ export async function computeOrganizePlan(windowId: number): Promise<OrganizePla
   return {
     stats,
     assignments: [...assignments.entries()].map(([tabId, category]) => ({ tabId, category })),
+    newCategories,
   };
 }
 

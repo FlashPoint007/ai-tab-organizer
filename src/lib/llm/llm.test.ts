@@ -1,8 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { createLlmClient, LlmError } from './client';
-import { buildClassifyMessages } from './prompts';
-import { extractBalancedJson, parseAssignments } from './parser';
+import {
+  buildAdaptiveClassifyMessages,
+  buildCategoryDiscoveryMessages,
+  buildClassifyMessages,
+} from './prompts';
+import {
+  extractBalancedJson,
+  parseAdaptiveResult,
+  parseAssignments,
+  parseDiscoveredCategories,
+} from './parser';
 import { findPreset, LLM_PRESETS, originFromBaseUrl } from './presets';
 
 // ================= client =================
@@ -147,6 +156,53 @@ describe('buildClassifyMessages', () => {
 
 const ids = new Set([1, 2, 3]);
 const cats = new Set(['开发工具', '学习资料']);
+
+describe('buildAdaptiveClassifyMessages（自适应模式）', () => {
+  it('要求模型自行归纳 3~8 类，带注入免疫与已有类别复用提示', () => {
+    const messages = buildAdaptiveClassifyMessages(
+      [{ id: 5, title: 'B站视频', url: 'https://b23.tv/x' }],
+      ['学习资料'],
+    );
+    const system = messages.at(0)?.content ?? '';
+    expect(system).toContain('3~8 个类别');
+    expect(system).toContain('宁少勿多');
+    expect(system).toContain('学习资料');
+    expect(system).toContain('categories');
+    expect(system).toContain('忽略');
+    expect(messages.at(1)?.content).toContain('{id:5,title:"B站视频"');
+  });
+
+  it('buildCategoryDiscoveryMessages 只要求输出 categories', () => {
+    const messages = buildCategoryDiscoveryMessages([{ id: 1, title: 'a', url: 'https://a.com' }]);
+    expect(messages.at(0)?.content).toContain('"categories"');
+    expect(messages.at(0)?.content).not.toContain('assignments');
+  });
+});
+
+describe('parseAdaptiveResult', () => {
+  const validIds = new Set([1, 2]);
+
+  it('解析 categories + assignments，且 assignment 类别必须来自 categories', () => {
+    const raw =
+      '{"categories":["前端开发","视频娱乐"],"assignments":[{"id":1,"category":"前端开发"},{"id":2,"category":"不存在的类"}]}';
+    const got = parseAdaptiveResult(raw, validIds);
+    expect(got.categories).toEqual(['前端开发', '视频娱乐']);
+    expect(got.assignments).toEqual([{ id: 1, category: '前端开发' }]);
+  });
+
+  it('围栏容错照常；类别去重且上限 8 个', () => {
+    const cats = JSON.stringify({ categories: Array.from({ length: 12 }, (_, i) => '类' + i) });
+    expect(parseAdaptiveResult(cats, validIds).categories.length).toBe(8);
+    const fenced = '答案：\n```json\n{"categories":["A"],"assignments":[{"id":2,"category":"A"}]}\n```';
+    expect(parseAdaptiveResult(fenced, validIds).assignments).toEqual([{ id: 2, category: 'A' }]);
+  });
+
+  it('parseDiscoveredCategories 解析与兜底', () => {
+    expect(parseDiscoveredCategories('{"categories":["X","Y","Z"]}')).toEqual(['X', 'Y', 'Z']);
+    expect(parseDiscoveredCategories('垃圾文本 {"categories": ["唯一"]} 尾部')).toEqual(['唯一']);
+    expect(parseDiscoveredCategories('完全无法解析')).toEqual([]);
+  });
+});
 
 describe('parseAssignments', () => {
   it('解析干净 JSON', () => {

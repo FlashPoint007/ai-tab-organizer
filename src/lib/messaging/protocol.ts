@@ -84,6 +84,8 @@ export interface PlanEntry {
 export interface OrganizePlan {
   stats: OrganizePlanStats;
   assignments: PlanEntry[];
+  /** 本次 AI 自适应新归纳出的类别（已并入用户清单） */
+  newCategories: string[];
 }
 
 export interface OrganizeSummary extends OrganizePlanStats {
