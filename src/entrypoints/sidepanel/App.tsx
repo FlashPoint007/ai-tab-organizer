@@ -446,10 +446,10 @@ export default function App() {
           domainSections.map((section) => {
             const collapsed = collapsedDomains.has(section.key);
             return (
-              <section key={section.key} className="mb-2">
+              <section key={section.key} className="mb-1">
                 <button
                   type="button"
-                  className="flex w-full items-center gap-1.5 rounded px-2 py-1 text-xs text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"
+                  className="flex w-full items-center gap-1 rounded px-2 py-0.5 text-[10px] leading-4 text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"
                   onClick={() =>
                     setCollapsedDomains((prev) => {
                       const next = new Set(prev);
@@ -485,10 +485,10 @@ export default function App() {
           categorySections.map((section) => {
             const collapsed = collapsedDomains.has('cat:' + section.key);
             return (
-              <section key={section.key} className="mb-2">
+              <section key={section.key} className="mb-1">
                 <button
                   type="button"
-                  className="flex w-full items-center gap-1.5 rounded px-2 py-1 text-xs text-emerald-400/80 hover:bg-neutral-900 hover:text-emerald-300"
+                  className="flex w-full items-center gap-1 rounded px-2 py-0.5 text-[10px] leading-4 text-emerald-400/80 hover:bg-neutral-900 hover:text-emerald-300"
                   onClick={() =>
                     setCollapsedDomains((prev) => {
                       const next = new Set(prev);
