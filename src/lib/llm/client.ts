@@ -39,6 +39,7 @@ export class LlmError extends Error {
   constructor(
     message: string,
     readonly status?: number,
+    readonly retryAfterMs?: number,
   ) {
     super(message);
     this.name = 'LlmError';
@@ -49,7 +50,34 @@ function joinEndpoint(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, '') + '/chat/completions';
 }
 
-const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
+/** Claude Code 风格：最多额外重试 10 次，指数退避带抖动，单次等待封顶 30 秒。 */
+export const DEFAULT_LLM_RETRIES = 10;
+export const MAX_RETRY_DELAY_MS = 30_000;
+const BASE_RETRY_DELAY_MS = 1_000;
+const RETRYABLE_STATUS = new Set([408, 409, 429, 500, 502, 503, 504, 529]);
+
+export function parseRetryAfterMs(value: string | null, now = Date.now()): number | undefined {
+  if (!value) return undefined;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.round(seconds * 1000);
+  const date = Date.parse(value);
+  if (!Number.isNaN(date)) return Math.max(0, date - now);
+  return undefined;
+}
+
+export function computeRetryDelayMs(
+  attempt: number,
+  retryAfterMs?: number,
+  randomValue = Math.random(),
+): number {
+  if (retryAfterMs !== undefined) {
+    return Math.min(MAX_RETRY_DELAY_MS, Math.max(0, retryAfterMs));
+  }
+  const exponential = Math.min(MAX_RETRY_DELAY_MS, BASE_RETRY_DELAY_MS * 2 ** attempt);
+  // ±20% 抖动，减少并发客户端同时重试造成的惊群
+  const jittered = exponential * (0.8 + Math.max(0, Math.min(1, randomValue)) * 0.4);
+  return Math.min(MAX_RETRY_DELAY_MS, Math.round(jittered));
+}
 
 interface ChatCompletionsResponse {
   choices?: Array<{ message?: { content?: string } }>;
@@ -95,7 +123,8 @@ export function createLlmClient(config: LlmProviderConfig, deps: LlmDeps = {}) {
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       const detail = text ? ': ' + text.slice(0, 200) : '';
-      throw new LlmError('HTTP ' + res.status + detail, res.status);
+      const retryAfterMs = parseRetryAfterMs(res.headers.get('Retry-After'));
+      throw new LlmError('HTTP ' + res.status + detail, res.status, retryAfterMs);
     }
 
     const json = (await res.json()) as ChatCompletionsResponse;
@@ -116,8 +145,11 @@ export function createLlmClient(config: LlmProviderConfig, deps: LlmDeps = {}) {
   async function chat(messages: ChatMessage[], opts: ChatOptions = {}): Promise<ChatResult> {
     if (!config.baseUrl || !config.model) throw new LlmError('LLM 配置不完整：缺少 baseUrl 或 model');
 
-    const retries = opts.retries ?? 2;
+    const retries = opts.retries ?? DEFAULT_LLM_RETRIES;
     const timeoutMs = opts.timeoutMs ?? 30_000;
+    if (opts.signal?.aborted) {
+      throw opts.signal.reason ?? new DOMException('Aborted', 'AbortError');
+    }
 
     for (let attempt = 0; ; attempt++) {
       const controller = new AbortController();
@@ -130,9 +162,12 @@ export function createLlmClient(config: LlmProviderConfig, deps: LlmDeps = {}) {
       } catch (e) {
         if (opts.signal?.aborted) throw e; // 用户取消，不重试
         const retryable =
-          e instanceof LlmError ? e.status !== undefined && RETRYABLE_STATUS.has(e.status) : true;
+          e instanceof LlmError
+            ? e.status === undefined || RETRYABLE_STATUS.has(e.status)
+            : true;
         if (!retryable || attempt >= retries) throw e;
-        await sleep(500 * 2 ** attempt + Math.floor(Math.random() * 200));
+        const retryAfterMs = e instanceof LlmError ? e.retryAfterMs : undefined;
+        await sleep(computeRetryDelayMs(attempt, retryAfterMs));
       } finally {
         clearTimeout(timer);
         opts.signal?.removeEventListener('abort', onOuterAbort);

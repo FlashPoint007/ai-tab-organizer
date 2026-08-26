@@ -118,15 +118,21 @@ export default function App() {
     for (const id of missing) fetchedGroupIds.current.add(id);
     void (async () => {
       const updates: Record<number, string> = {};
+      // 折叠组的原始名字存在 session（折叠时被置空以节省标签栏空间）
+      const collapsedTitles =
+        (await browser.storage.session.get('collapsedGroupTitles:v1'))['collapsedGroupTitles:v1'] as
+          | Record<number, string>
+          | undefined ?? {};
       for (const id of missing) {
         try {
           const group = await browser.tabGroups.get(id);
-          if (!group.title) {
+          const title = group.title || collapsedTitles[id] || '';
+          if (!title) {
             // 组名暂空（可能刚建组还没来得及 update），下次事件重试
             fetchedGroupIds.current.delete(id);
             continue;
           }
-          updates[id] = group.title;
+          updates[id] = title;
         } catch {
           // 查询失败（组刚被解散等）：允许下次重试
           fetchedGroupIds.current.delete(id);

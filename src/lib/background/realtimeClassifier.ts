@@ -17,7 +17,9 @@ import { applyRules, colorForCategory } from '../organizer/rules';
 import { isWebUrl } from '../organizer/domains';
 import { createTabGroup } from '../browser/groupsWrap';
 import { loadSettings, saveSettings } from '../settings/settingsStore';
-import { localKV } from '../storage/browserKv';
+import { localKV, sessionKV } from '../storage/browserKv';
+import { getCollapsedTitles } from './collapsedGroups';
+import { findGroupIdForCategory } from './collapsedGroupLogic';
 import { getCachedCategory, putCachedCategory, CATEGORY_CACHE_TTL_MS } from '../storage/categoryCache';
 import { cacheKeyFor } from '../../utils/url';
 import type { Settings } from '../settings/types';
@@ -139,10 +141,17 @@ async function classifyOne(tabId: number, settings: Settings): Promise<void> {
 
 async function placeInGroup(tabId: number, windowId: number, category: string): Promise<void> {
   // 找同名组就并入，否则建新组（配色由类别名哈希决定，跨会话稳定）
-  const groups = await browser.tabGroups.query({ windowId, title: category }).catch(() => []);
-  const existing = groups.find((g) => g.id !== undefined);
-  if (existing?.id !== undefined) {
-    await browser.tabs.group({ tabIds: [tabId], groupId: existing.id });
+  // 折叠组的 title 被置空以节省标签栏空间，真名在 session 暂存表里，
+  // 必须按「实际名字」匹配，否则会给同一类别重复建组。
+  const groups = await browser.tabGroups.query({ windowId }).catch(() => []);
+  const savedTitles = await getCollapsedTitles(sessionKV);
+  const targetId = findGroupIdForCategory(
+    groups.map((g) => ({ id: g.id, title: g.title })),
+    savedTitles,
+    category,
+  );
+  if (targetId !== undefined) {
+    await browser.tabs.group({ tabIds: [tabId], groupId: targetId });
     return;
   }
   await createTabGroup(windowId, [tabId], {
