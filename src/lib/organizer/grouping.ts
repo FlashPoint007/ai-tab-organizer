@@ -62,3 +62,27 @@ export function assignGroupColors(groups: DomainGroup[]): Map<string, GroupColor
   });
   return colors;
 }
+
+/**
+ * 孤类折叠：不足 minGroupSize 的类别整体并入 fallbackBucket（如「其他」），
+ * 保证「AI 整理之后所有标签都有归属」。fallback 自身不参与折叠。
+ * 返回新 Map，不改写入参。
+ */
+export function foldSingletonCategories(
+  assignments: Map<number, string>,
+  minGroupSize: number,
+  fallbackBucket: string,
+): Map<number, string> {
+  const counts = new Map<string, number>();
+  for (const category of assignments.values()) {
+    counts.set(category, (counts.get(category) ?? 0) + 1);
+  }
+
+  const folded = new Map<number, string>();
+  for (const [tabId, category] of assignments) {
+    const count = counts.get(category) ?? 0;
+    const isThin = category !== fallbackBucket && count < Math.max(1, minGroupSize);
+    folded.set(tabId, isThin ? fallbackBucket : category);
+  }
+  return folded;
+}

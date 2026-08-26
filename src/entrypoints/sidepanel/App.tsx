@@ -121,9 +121,15 @@ export default function App() {
       for (const id of missing) {
         try {
           const group = await browser.tabGroups.get(id);
-          updates[id] = group.title || t('unnamedGroup');
+          if (!group.title) {
+            // 组名暂空（可能刚建组还没来得及 update），下次事件重试
+            fetchedGroupIds.current.delete(id);
+            continue;
+          }
+          updates[id] = group.title;
         } catch {
-          updates[id] = t('unnamedGroup');
+          // 查询失败（组刚被解散等）：允许下次重试
+          fetchedGroupIds.current.delete(id);
         }
       }
       setGroupNames((prev) => ({ ...prev, ...updates }));

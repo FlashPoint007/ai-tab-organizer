@@ -16,6 +16,7 @@ import {
   parseDiscoveredCategories,
 } from '../llm/parser';
 import { applyRules, colorForCategory, computeCategoryGroups } from '../organizer/rules';
+import { foldSingletonCategories } from '../organizer/grouping';
 import { isWebUrl } from '../organizer/domains';
 import { createTabGroup, ungroupAllUngroupedTabsInWindow } from '../browser/groupsWrap';
 import { getWindowTabsMeta } from '../browser/tabsWrap';
@@ -238,6 +239,14 @@ export async function computeOrganizePlan(windowId: number): Promise<OrganizePla
     }
   }
 
+  // ---- 孤类折叠：不足成组门槛的类别并入「其他」，保证所有标签都有归属 ----
+  const FOLD_BUCKET = '其他';
+  const effectiveAssignments = foldSingletonCategories(
+    assignments,
+    settings.minGroupSizeForRules,
+    FOLD_BUCKET,
+  );
+
   const stats: OrganizePlanStats = {
     llmAssigned,
     cacheHits,
@@ -253,7 +262,10 @@ export async function computeOrganizePlan(windowId: number): Promise<OrganizePla
 
   return {
     stats,
-    assignments: [...assignments.entries()].map(([tabId, category]) => ({ tabId, category })),
+    assignments: [...effectiveAssignments.entries()].map(([tabId, category]) => ({
+      tabId,
+      category,
+    })),
     newCategories,
   };
 }

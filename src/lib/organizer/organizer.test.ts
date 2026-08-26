@@ -4,7 +4,11 @@ import type { TabMeta } from '../types';
 import { parseGroupName } from './domains';
 import { cleanupCandidatesFromClusters, findDuplicateTabs, findInactiveTabs } from './cleanup';
 import { filterTabs } from './filtering';
-import { assignGroupColors, computeDomainGroups } from './grouping';
+import {
+  assignGroupColors,
+  computeDomainGroups,
+  foldSingletonCategories,
+} from './grouping';
 
 function tab(partial: Partial<TabMeta> & Pick<TabMeta, 'id' | 'url'>): TabMeta {
   return {
@@ -125,5 +129,44 @@ describe('filterTabs', () => {
   it('title 与 url 均参与大小写不敏感匹配', () => {
     expect(filterTabs(tabs, 'git').map((t) => t.id)).toEqual([1]);
     expect(filterTabs(tabs, 'BILIBILI').map((t) => t.id)).toEqual([2]);
+  });
+});
+
+describe('foldSingletonCategories', () => {
+  const build = (pairs: Array<[number, string]>): Map<number, string> => new Map(pairs);
+
+  it('不足门槛的孤类并入「其他」，达标的保留', () => {
+    const assignments = build([
+      [1, '开发工具'],
+      [2, '开发工具'],
+      [3, '设计创意'],
+    ]);
+    const got = foldSingletonCategories(assignments, 2, '其他');
+    expect(got.get(1)).toBe('开发工具');
+    expect(got.get(2)).toBe('开发工具');
+    expect(got.get(3)).toBe('其他');
+  });
+
+  it('fallback 自身已有成员时不参与折叠', () => {
+    const assignments = build([
+      [1, '其他'],
+      [2, '孤类A'],
+      [3, '孤类B'],
+    ]);
+    const got = foldSingletonCategories(assignments, 2, '其他');
+    expect(got.get(1)).toBe('其他');
+    expect(got.get(2)).toBe('其他');
+    expect(got.get(3)).toBe('其他');
+  });
+
+  it('全部达标时内容等价返回', () => {
+    const assignments = build([
+      [1, 'A'],
+      [2, 'A'],
+      [3, 'B'],
+      [4, 'B'],
+    ]);
+    const got = foldSingletonCategories(assignments, 2, '其他');
+    expect([...got.entries()]).toEqual([...assignments.entries()]);
   });
 });
