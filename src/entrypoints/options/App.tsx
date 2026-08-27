@@ -4,7 +4,12 @@ import { browser } from 'wxt/browser';
 import { sendRequest } from '@/lib/messaging/client';
 import type { LlmConfigPayload, LlmUsageStats } from '@/lib/messaging/protocol';
 import { buildBackupFileName, parseBackupText } from '@/lib/settings/backup';
-import type { AutoOrganizeConfig, DomainRule, UiLanguage } from '@/lib/settings/types';
+import type {
+  AutoOrganizeConfig,
+  CollapsedTitleMode,
+  DomainRule,
+  UiLanguage,
+} from '@/lib/settings/types';
 import { findPreset, LLM_PRESETS, originFromBaseUrl } from '@/lib/llm/presets';
 
 type RuleMatchType = DomainRule['matchType'];
@@ -37,6 +42,7 @@ export default function App() {
   const [uiLanguage, setUiLanguage] = useState<UiLanguage>('zh');
   const [autoApplyState, setAutoApplyState] = useState(false);
   const [realtimeState, setRealtimeState] = useState(true);
+  const [collapsedMode, setCollapsedMode] = useState<CollapsedTitleMode>('abbreviate');
   const [minGroupSize, setMinGroupSize] = useState(2);
   const [autoOrganize, setAutoOrganize] = useState<AutoOrganizeConfig>({
     mode: 'off',
@@ -67,6 +73,7 @@ export default function App() {
             language: UiLanguage;
             autoApply: boolean;
             realtime: boolean;
+            collapsedTitleMode: CollapsedTitleMode;
             minGroupSizeForRules: number;
             autoOrganize: AutoOrganizeConfig;
           }>({ type: 'getUiSettings' }),
@@ -77,6 +84,7 @@ export default function App() {
         setUiLanguage(ui.language);
         setAutoApplyState(ui.autoApply);
         setRealtimeState(ui.realtime);
+        setCollapsedMode(ui.collapsedTitleMode);
         setMinGroupSize(ui.minGroupSizeForRules);
         setAutoOrganize(ui.autoOrganize);
         setLlm(
@@ -125,6 +133,7 @@ export default function App() {
       language?: UiLanguage;
       autoApply?: boolean;
       realtime?: boolean;
+      collapsedTitleMode?: CollapsedTitleMode;
       minGroupSizeForRules?: number;
       autoOrganize?: AutoOrganizeConfig;
     }) => {
@@ -153,6 +162,7 @@ export default function App() {
           autoOrganize: AutoOrganizeConfig;
           language: UiLanguage;
           realtime: boolean;
+          collapsedTitleMode: CollapsedTitleMode;
           llm: LlmConfigPayload | null;
         }>({ type: 'getExportBundle' });
 
@@ -167,6 +177,7 @@ export default function App() {
             autoOrganize: bundle.autoOrganize,
             language: bundle.language,
             realtime: bundle.realtime,
+            collapsedTitleMode: bundle.collapsedTitleMode,
             llm: bundle.llm
               ? {
                   preset: bundle.llm.preset,
@@ -210,6 +221,9 @@ export default function App() {
             ...(s.language !== undefined ? { language: s.language } : {}),
             ...(s.autoApply !== undefined ? { autoApply: s.autoApply } : {}),
             ...(s.realtime !== undefined ? { realtime: s.realtime } : {}),
+            ...(s.collapsedTitleMode !== undefined
+              ? { collapsedTitleMode: s.collapsedTitleMode }
+              : {}),
             ...(s.autoOrganize !== undefined ? { autoOrganize: s.autoOrganize } : {}),
           });
           if (s.llm) {
@@ -598,6 +612,26 @@ export default function App() {
             />
             新标签打开后自动归类入组（缓存/规则优先，必要时单条 AI 请求）
           </label>
+        </div>
+
+        <div className="mt-3 flex items-center gap-2">
+          <label className="w-24 shrink-0 text-xs text-neutral-500">折叠组名</label>
+          <select
+            value={collapsedMode}
+            onChange={(e) => {
+              const collapsedTitleMode = e.target.value as CollapsedTitleMode;
+              setCollapsedMode(collapsedTitleMode);
+              void saveUi({ collapsedTitleMode });
+            }}
+            className={input + ' w-64'}
+          >
+            <option value="abbreviate">缩写（窄色块，悬停显示缩写）</option>
+            <option value="hide">隐藏（只剩色点，悬停显示「未命名的组」）</option>
+            <option value="keep">保留全名（悬停信息完整，但占标签栏宽度）</option>
+          </select>
+          <span className="text-[11px] text-neutral-600">
+            Chrome 折叠组的宽度与悬停提示共用组名字段，只能三者取一；切换后立即生效
+          </span>
         </div>
 
         <div className="mt-3 flex items-center gap-2">

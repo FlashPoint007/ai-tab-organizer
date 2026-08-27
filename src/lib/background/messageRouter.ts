@@ -30,6 +30,7 @@ import { applyCategoryPlan, computeOrganizePlan } from './organizeService';
 import { syncAutoOrganizeAlarm } from './autoTrigger';
 import { localKV } from '../storage/browserKv';
 import { clearCategoryCache } from '../storage/categoryCache';
+import { reapplyCollapsedTitles } from './collapsedGroups';
 import { err, ok } from '../types';
 import type { Result } from '../types';
 import {
@@ -317,6 +318,7 @@ async function dispatch(req: Request): Promise<unknown> {
         language: settings.language,
         autoApply: settings.autoApply,
         realtime: settings.realtime,
+        collapsedTitleMode: settings.collapsedTitleMode,
         minGroupSizeForRules: settings.minGroupSizeForRules,
         autoOrganize: settings.autoOrganize,
       };
@@ -329,6 +331,9 @@ async function dispatch(req: Request): Promise<unknown> {
         ...(req.language !== undefined ? { language: req.language } : {}),
         ...(req.autoApply !== undefined ? { autoApply: req.autoApply } : {}),
         ...(req.realtime !== undefined ? { realtime: req.realtime } : {}),
+        ...(req.collapsedTitleMode !== undefined
+          ? { collapsedTitleMode: req.collapsedTitleMode }
+          : {}),
         ...(req.minGroupSizeForRules !== undefined
           ? { minGroupSizeForRules: req.minGroupSizeForRules }
           : {}),
@@ -338,6 +343,8 @@ async function dispatch(req: Request): Promise<unknown> {
       void syncAutoOrganizeAlarm(localKV);
       // 让已打开的 Side Panel 即时切换语言 / 生效 autoApply
       safeBroadcast({ type: 'settingsChanged', language: next.language, autoApply: next.autoApply });
+      // 折叠标题策略变了：立即按新策略重刷全部组，不必等下一次折叠
+      if (req.collapsedTitleMode !== undefined) void reapplyCollapsedTitles();
       return null;
     }
 
@@ -351,6 +358,7 @@ async function dispatch(req: Request): Promise<unknown> {
         autoOrganize: settings.autoOrganize,
         language: settings.language,
         realtime: settings.realtime,
+        collapsedTitleMode: settings.collapsedTitleMode,
         llm: settings.llm,
       };
     }

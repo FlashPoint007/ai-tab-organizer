@@ -29,6 +29,14 @@ export interface BatchConfig {
   timeoutMs: number;
 }
 
+/**
+ * 折叠组标题策略（Chrome 折叠组的 chip 宽度与 hover tooltip 共用 title 字段）：
+ * hide=清空标题只剩色点（hover 显示「未命名的组」）
+ * abbreviate=缩写成 1~2 个字（chip 依然很窄，hover 能辨识）
+ * keep=保留全名（hover 信息完整，但占标签栏宽度）
+ */
+export type CollapsedTitleMode = 'hide' | 'abbreviate' | 'keep';
+
 export type UiLanguage = 'zh' | 'en';
 
 export type AutoOrganizeMode = 'off' | 'interval' | 'threshold';
@@ -56,6 +64,11 @@ export interface Settings {
   language: UiLanguage;
   /** M6：新标签实时归类（缓存→规则→单条LLM→自动入组） */
   realtime: boolean;
+  /**
+   * M6：折叠组的标题策略。
+   * hide=只剩色点（hover 显示「未命名的组」）｜abbreviate=缩写（窄 chip + hover 可辨识）｜keep=保留全名
+   */
+  collapsedTitleMode: CollapsedTitleMode;
 }
 
 export const DEFAULT_CATEGORIES: readonly string[] = [
@@ -82,4 +95,5 @@ export const DEFAULT_SETTINGS: Settings = {
   autoOrganize: { mode: 'off', intervalMinutes: 30, thresholdCount: 8 },
   language: 'zh',
   realtime: true,
+  collapsedTitleMode: 'abbreviate',
 };

@@ -152,6 +152,7 @@ export const requestSchema = z.discriminatedUnion('type', [
     language: z.enum(['zh', 'en']).optional(),
     autoApply: z.boolean().optional(),
     realtime: z.boolean().optional(),
+    collapsedTitleMode: z.enum(['hide', 'abbreviate', 'keep']).optional(),
     minGroupSizeForRules: z.number().int().min(2).max(50).optional(),
     autoOrganize: z
       .object({
@@ -209,7 +210,7 @@ export type RequestPayloadMap = {
   clearCategoryCache: null;
   planOrganizeByLlm: OrganizePlan;
   applyCategoryPlan: { groups: number; groupedTabs: number };
-  getUiSettings: { language: 'zh' | 'en'; autoApply: boolean; realtime: boolean; minGroupSizeForRules: number; autoOrganize: {
+  getUiSettings: { language: 'zh' | 'en'; autoApply: boolean; realtime: boolean; collapsedTitleMode: 'hide' | 'abbreviate' | 'keep'; minGroupSizeForRules: number; autoOrganize: {
     mode: 'off' | 'interval' | 'threshold';
     intervalMinutes: number;
     thresholdCount: number;
@@ -224,6 +225,7 @@ export type RequestPayloadMap = {
     autoOrganize: { mode: 'off' | 'interval' | 'threshold'; intervalMinutes: number; thresholdCount: number };
     language: 'zh' | 'en';
     realtime: boolean;
+    collapsedTitleMode: 'hide' | 'abbreviate' | 'keep';
     llm: { preset: string; baseUrl: string; model: string; apiKey?: string; temperature?: number; maxOutputTokens?: number } | null;
   };
 };

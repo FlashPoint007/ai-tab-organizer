@@ -23,6 +23,7 @@ export const backupSchema = z.object({
       .optional(),
     language: z.enum(['zh', 'en']).optional(),
     realtime: z.boolean().optional(),
+    collapsedTitleMode: z.enum(['hide', 'abbreviate', 'keep']).optional(),
     llm: llmConfigSchema.nullable().optional(),
   }),
 });
