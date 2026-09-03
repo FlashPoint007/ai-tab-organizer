@@ -27,42 +27,50 @@ function TabRowImpl({
   onToggleMute,
 }: TabRowProps) {
   const actionBtn =
-    'shrink-0 rounded p-1 text-neutral-500 opacity-0 transition group-hover:opacity-100 hover:bg-neutral-800 hover:text-neutral-200 focus:opacity-100';
+    'shrink-0 rounded-md p-1 text-neutral-500 transition hover:bg-ink-800 hover:text-neutral-200 focus:opacity-100 ' +
+    'opacity-0 group-hover:opacity-100';
 
   return (
     <div
       className={
-        'group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm transition ' +
-        (checked ? 'bg-neutral-800' : 'hover:bg-neutral-900') +
-        (tab.active ? ' ring-1 ring-inset ring-emerald-900' : '')
+        'group relative flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-[13px] transition ' +
+        (checked ? 'bg-ink-800' : 'hover:bg-ink-850') +
+        (tab.active ? ' bg-ink-850' : '')
       }
       onClick={() => onActivate(tab.id)}
     >
+      {/* 活动标签：细 brass 边轨 + 柔和提亮（signature 细节） */}
+      {tab.active && (
+        <span className="absolute left-[2px] top-1.5 bottom-1.5 w-[3px] rounded-full bg-brass-500" />
+      )}
+
       <input
         type="checkbox"
-        className="shrink-0 accent-emerald-600"
+        className="shrink-0 accent-brass-500"
         checked={checked}
         onClick={(e) => e.stopPropagation()}
         onChange={() => onToggleChecked(tab.id)}
       />
 
-      <img
-        src={faviconUrl(tab.url)}
-        alt=""
-        className="h-4 w-4 shrink-0 rounded-sm"
-        onError={(e) => {
-          e.currentTarget.style.visibility = 'hidden';
-        }}
-      />
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-md bg-ink-700/60">
+        <img
+          src={faviconUrl(tab.url)}
+          alt=""
+          className="h-4 w-4"
+          onError={(e) => {
+            e.currentTarget.style.visibility = 'hidden';
+          }}
+        />
+      </span>
 
       <span
         className={
           'min-w-0 flex-1 truncate ' +
-          (tab.active ? 'font-medium text-neutral-100' : 'text-neutral-300')
+          (tab.active ? 'font-medium text-neutral-50' : 'text-neutral-300')
         }
         title={`${tab.title}\n${tab.url}`}
       >
-        {tab.pinned && <span className="mr-1 text-amber-400">•</span>}
+        {tab.pinned && <span className="mr-1 text-brass-400">•</span>}
         {tab.muted && <span className="mr-1">🔇</span>}
         {tab.audible && !tab.muted && <span className="mr-1">🔊</span>}
         {tab.title || tab.url}
@@ -71,7 +79,7 @@ function TabRowImpl({
       <button
         type="button"
         title={tab.pinned ? t('unpin') : t('pin')}
-        className={actionBtn + (tab.pinned ? ' !opacity-100 text-amber-400' : '')}
+        className={actionBtn + (tab.pinned ? ' !opacity-100 text-brass-400' : '')}
         onClick={(e) => {
           e.stopPropagation();
           onTogglePin(tab);

@@ -1,1 +1,131 @@
 @import 'tailwindcss';
+
+/*
+  AI Tab Organizer — side panel design tokens.
+  Direction: "machined control surface on deep graphite."
+  A near-black-but-not-black graphite with layered elevations, hairline borders,
+  a restrained warm-brass signature accent, and mono readouts for data. The only
+  assertive accent is the brass "AI organize" command; everything around it stays
+  quiet and disciplined so the panel reads as a precision instrument, not a
+  template dark UI.
+*/
+
+@theme {
+  /* Graphite surface scale (cool, near-neutral, not pure black). */
+  --color-ink-950: #0a0d12;
+  --color-ink-900: #12161d;
+  --color-ink-850: #161b23;
+  --color-ink-800: #1c222c;
+  --color-ink-700: #262e39;
+
+  /* Warm brass accent — the signature / primary action. */
+  --color-brass-200: #f7e7c4;
+  --color-brass-300: #f0d9a8;
+  --color-brass-400: #e3c07f;
+  --color-brass-500: #cda35e;
+  --color-brass-600: #a9824a;
+
+  /* Status hues: kept subtle and readable against graphite. */
+  --color-mint-300: #9fdcbe;
+  --color-mint-400: #83c9a6;
+  --color-mint-500: #6bb590;
+
+  --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono',
+    monospace;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--color-ink-950);
+  color: #e9edf2;
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+::selection {
+  background: color-mix(in oklab, var(--color-brass-500) 28%, transparent);
+}
+
+/* Thin, quiet scrollbar so the list breathes without visual noise. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-ink-700) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-ink-700);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--color-ink-800);
+  background-clip: padding-box;
+}
+
+/* Consistent visible keyboard focus. */
+:focus-visible {
+  outline: 2px solid var(--color-brass-500);
+  outline-offset: 1px;
+}
+
+/* The signature command button: warm brass gradient + soft glow. */
+.brand-button {
+  background-image: linear-gradient(180deg, var(--color-brass-300) 0%, var(--color-brass-500) 100%);
+  color: #2a1f0d;
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--color-brass-400) 40%, transparent),
+    0 6px 20px -8px color-mix(in oklab, var(--color-brass-500) 55%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transition:
+    filter 160ms ease,
+    transform 120ms ease,
+    box-shadow 160ms ease;
+}
+.brand-button:hover {
+  filter: brightness(1.05);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--color-brass-400) 55%, transparent),
+    0 10px 26px -8px color-mix(in oklab, var(--color-brass-500) 62%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.brand-button:active {
+  transform: translateY(1px);
+}
+.brand-button:disabled {
+  opacity: 0.5;
+  filter: saturate(0.7);
+}
+
+/* Ambient glow that anchors the top of the panel to the signature brass. */
+.header-glow {
+  background:
+    radial-gradient(120% 90% at 50% -20%, color-mix(in oklab, var(--color-brass-500) 16%, transparent) 0%, transparent 60%),
+    linear-gradient(180deg, var(--color-ink-900) 0%, var(--color-ink-950) 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

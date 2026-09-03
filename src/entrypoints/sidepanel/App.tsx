@@ -4,6 +4,7 @@ import { browser } from 'wxt/browser';
 import { PreviewModal } from '@/components/PreviewModal';
 import { SnapshotModal } from '@/components/SnapshotModal';
 import { TabRow } from '@/components/TabRow';
+import { SearchIcon, SparkIcon } from '@/components/icons';
 import {
   cleanupCandidatesFromClusters,
   findDuplicateTabs,
@@ -339,91 +340,116 @@ export default function App() {
   };
 
   // ---------- 渲染 ----------
-  const toolbarBtn =
-    'rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-1 text-xs text-neutral-300 transition hover:border-neutral-600 hover:text-white disabled:opacity-40';
+  const ghostBtn =
+    'rounded-md px-1 py-1.5 text-[11px] font-medium text-neutral-400 transition hover:bg-ink-800 hover:text-neutral-100 disabled:opacity-40';
+  const bulkBtn =
+    'rounded-md px-2 py-1 text-[11px] font-medium text-neutral-300 transition hover:bg-ink-800 hover:text-neutral-50 disabled:opacity-40';
 
   return (
-    <div className="flex h-screen flex-col bg-neutral-950 text-neutral-100">
-      {/* 头部 */}
-      <header className="border-b border-neutral-800 px-3 py-2">
-        <div className="flex items-center justify-between">
-          <h1 className="text-sm font-semibold tracking-tight">{t('appName')}</h1>
-          <div className="flex items-center gap-1 text-xs">
-            <button
-              type="button"
-              className={`${toolbarBtn} ${viewMode === 'flat' ? '!border-emerald-700 !text-emerald-400' : ''}`}
-              onClick={() => setViewMode('flat')}
-            >
-              {t('viewFlat')}
-            </button>
-            <button
-              type="button"
-              className={`${toolbarBtn} ${viewMode === 'domain' ? '!border-emerald-700 !text-emerald-400' : ''}`}
-              onClick={() => setViewMode('domain')}
-            >
-              {t('viewDomain')}
-            </button>
-            <button
-              type="button"
-              className={`${toolbarBtn} ${viewMode === 'category' ? '!border-emerald-700 !text-emerald-400' : ''}`}
-              onClick={() => setViewMode('category')}
-            >
-              {t('viewCategory')}
-            </button>
-          </div>
+    <div className="flex h-screen flex-col bg-ink-950 text-neutral-100">
+      {/* 头部：品牌 + 视图切换 + 搜索 + signature AI 动作 */}
+      <header className="header-glow border-b border-ink-700 px-3 pb-3 pt-2.5">
+        <div className="flex items-center gap-2">
+          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-brass-300 to-brass-600 text-[11px] font-bold text-ink-950 shadow-sm">
+            ◈
+          </span>
+          <h1 className="text-[13px] font-semibold tracking-tight text-neutral-100">
+            {t('appName')}
+          </h1>
         </div>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={t('searchPlaceholder')}
-          className="mt-2 w-full rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-1.5 text-sm outline-none placeholder:text-neutral-600 focus:border-emerald-700"
-        />
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          <button
-            type="button"
-            disabled={organizing}
-            onClick={organizeByLlm}
-            className="rounded-md bg-emerald-700 px-3 py-1 text-xs font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-50"
-          >
-            {organizing ? t('aiOrganizing') : t('aiOrganize')}
-          </button>
-          <button type="button" className={toolbarBtn} onClick={groupByDomain}>
+
+        {/* 视图切换：紧凑 segmented 控件 */}
+        <div className="mt-2.5 grid grid-cols-3 gap-0.5 rounded-lg border border-ink-700 bg-ink-900 p-0.5">
+          {(
+            [
+              ['flat', t('viewFlat')],
+              ['domain', t('viewDomain')],
+              ['category', t('viewCategory')],
+            ] as Array<[ViewMode, string]>
+          ).map(([mode, label]) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setViewMode(mode)}
+              className={
+                'rounded-md px-2 py-1.5 text-xs font-medium transition ' +
+                (viewMode === mode
+                  ? 'bg-ink-800 text-brass-300 shadow-inner'
+                  : 'text-neutral-400 hover:text-neutral-100')
+              }
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* 搜索 */}
+        <div className="relative mt-2">
+          <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t('searchPlaceholder')}
+            className="w-full rounded-lg border border-ink-700 bg-ink-900 py-2 pl-8 pr-3 text-[13px] text-neutral-100 outline-none transition placeholder:text-neutral-600 focus:border-brass-600/70 focus:bg-ink-850"
+          />
+        </div>
+
+        {/* signature：AI 整理（唯一的高亮动作） */}
+        <button
+          type="button"
+          disabled={organizing}
+          onClick={organizeByLlm}
+          className="brand-button mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[13px] font-semibold disabled:cursor-not-allowed"
+        >
+          <SparkIcon className="h-4 w-4" />
+          {organizing ? t('aiOrganizing') : t('aiOrganize')}
+        </button>
+
+        {/* 次级操作：安静的小按钮网格 */}
+        <div className="mt-2 grid grid-cols-3 gap-1">
+          <button type="button" className={ghostBtn} onClick={groupByDomain}>
             {t('groupByDomain')}
           </button>
-          <button type="button" className={toolbarBtn} onClick={groupByRules}>
+          <button type="button" className={ghostBtn} onClick={groupByRules}>
             {t('groupByCategory')}
           </button>
-          <button type="button" className={toolbarBtn} onClick={sortByDomain}>
+          <button type="button" className={ghostBtn} onClick={sortByDomain}>
             {t('sortByDomain')}
           </button>
-          <button type="button" className={toolbarBtn} onClick={() => askCleanup('duplicates')}>
+        </div>
+        <div className="mt-1 grid grid-cols-3 gap-1">
+          <button type="button" className={ghostBtn} onClick={() => askCleanup('duplicates')}>
             {t('cleanupDuplicates')}
-            {duplicateCount > 0 ? `(${duplicateCount})` : ''}
+            {duplicateCount > 0 && (
+              <span className="ml-1 font-mono text-brass-400">{duplicateCount}</span>
+            )}
           </button>
-          <button type="button" className={toolbarBtn} onClick={() => askCleanup('inactive')}>
+          <button type="button" className={ghostBtn} onClick={() => askCleanup('inactive')}>
             {t('cleanupInactive')}
-            {inactiveCount > 0 ? `(${inactiveCount})` : ''}
+            {inactiveCount > 0 && (
+              <span className="ml-1 font-mono text-brass-400">{inactiveCount}</span>
+            )}
           </button>
-          <button type="button" className={toolbarBtn} onClick={() => setShowSnapshotModal(true)}>
+          <button type="button" className={ghostBtn} onClick={() => setShowSnapshotModal(true)}>
             {t('snapshots')}
           </button>
         </div>
       </header>
 
-      {/* 两步确认条 */}
+      {/* 两步确认条（警告态，与品牌 brass 区分） */}
       {pendingCleanup && (
-        <div className="flex items-center gap-2 border-b border-amber-900/60 bg-amber-950/40 px-3 py-2 text-xs text-amber-200">
+        <div className="flex items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
           <span className="flex-1">{t('confirmCloseN', { count: pendingCleanup.tabIds.length })}</span>
           <button
             type="button"
-            className="rounded bg-amber-700 px-2 py-1 font-medium text-white hover:bg-amber-600"
+            className="rounded-md bg-amber-500 px-2.5 py-1 font-medium text-ink-950 transition hover:brightness-110"
             onClick={executeCleanup}
           >
             {t('confirmClose')}
           </button>
           <button
             type="button"
-            className="rounded px-2 py-1 text-amber-300 hover:bg-neutral-800"
+            className="rounded-md px-2 py-1 text-amber-200 transition hover:bg-ink-800"
             onClick={() => setPendingCleanup(null)}
           >
             {t('cancel')}
@@ -462,7 +488,7 @@ export default function App() {
               <section key={section.key} className="mb-1">
                 <button
                   type="button"
-                  className="flex w-full items-center gap-1 rounded px-2 py-0.5 text-[10px] leading-4 text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"
+                  className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] text-neutral-400 transition hover:bg-ink-850 hover:text-neutral-200"
                   onClick={() =>
                     setCollapsedDomains((prev) => {
                       const next = new Set(prev);
@@ -472,9 +498,9 @@ export default function App() {
                     })
                   }
                 >
-                  <span>{collapsed ? '▸' : '▾'}</span>
-                  <span className="truncate font-medium">{section.label}</span>
-                  <span className="text-neutral-600">{section.tabs.length}</span>
+                  <span className="text-neutral-600">{collapsed ? '▸' : '▾'}</span>
+                  <span className="min-w-0 flex-1 truncate font-medium">{section.label}</span>
+                  <span className="shrink-0 font-mono text-neutral-600">{section.tabs.length}</span>
                 </button>
                 {!collapsed &&
                   section.tabs.map((tab) => (
@@ -501,7 +527,7 @@ export default function App() {
               <section key={section.key} className="mb-1">
                 <button
                   type="button"
-                  className="flex w-full items-center gap-1 rounded px-2 py-0.5 text-[10px] leading-4 text-emerald-400/80 hover:bg-neutral-900 hover:text-emerald-300"
+                  className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] text-brass-300/90 transition hover:bg-ink-850 hover:text-brass-200"
                   onClick={() =>
                     setCollapsedDomains((prev) => {
                       const next = new Set(prev);
@@ -512,9 +538,9 @@ export default function App() {
                     })
                   }
                 >
-                  <span>{collapsed ? '▸' : '▾'}</span>
-                  <span className="truncate font-medium">{section.label}</span>
-                  <span className="text-neutral-600">{section.tabs.length}</span>
+                  <span className="text-brass-500/70">{collapsed ? '▸' : '▾'}</span>
+                  <span className="min-w-0 flex-1 truncate font-medium">{section.label}</span>
+                  <span className="shrink-0 font-mono text-neutral-600">{section.tabs.length}</span>
                 </button>
                 {!collapsed &&
                   section.tabs.map((tab) => (
@@ -537,26 +563,28 @@ export default function App() {
 
       {/* 批量操作条 */}
       {selected.size > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5 border-t border-neutral-800 bg-neutral-900 px-3 py-2 text-xs">
-          <span className="mr-auto text-neutral-400">{t('selectedCount', { count: selected.size })}</span>
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-ink-700 bg-ink-900/80 px-3 py-2 text-xs backdrop-blur">
+          <span className="mr-auto font-mono text-neutral-400">
+            {t('selectedCount', { count: selected.size })}
+          </span>
           {groupTitleInput === null ? (
             <>
-              <button type="button" className={toolbarBtn} onClick={() => bulkAction('closeTabs')}>
+              <button type="button" className={bulkBtn} onClick={() => bulkAction('closeTabs')}>
                 {t('bulkClose')}
               </button>
-              <button type="button" className={toolbarBtn} onClick={() => bulkAction('setPinned', { pinned: true })}>
+              <button type="button" className={bulkBtn} onClick={() => bulkAction('setPinned', { pinned: true })}>
                 {t('pin')}
               </button>
-              <button type="button" className={toolbarBtn} onClick={() => bulkAction('setPinned', { pinned: false })}>
+              <button type="button" className={bulkBtn} onClick={() => bulkAction('setPinned', { pinned: false })}>
                 {t('unpin')}
               </button>
-              <button type="button" className={toolbarBtn} onClick={() => bulkAction('setMuted', { muted: true })}>
+              <button type="button" className={bulkBtn} onClick={() => bulkAction('setMuted', { muted: true })}>
                 {t('mute')}
               </button>
-              <button type="button" className={toolbarBtn} onClick={() => setGroupTitleInput('')}>
+              <button type="button" className={bulkBtn} onClick={() => setGroupTitleInput('')}>
                 {t('groupDots')}
               </button>
-              <button type="button" className={toolbarBtn} onClick={() => setSelected(new Set())}>
+              <button type="button" className={bulkBtn} onClick={() => setSelected(new Set())}>
                 {t('clearSelection')}
               </button>
             </>
@@ -571,16 +599,16 @@ export default function App() {
                   if (e.key === 'Escape') setGroupTitleInput(null);
                 }}
                 placeholder={t('groupNamePlaceholder')}
-                className="min-w-0 flex-1 rounded border border-neutral-700 bg-neutral-950 px-2 py-1 outline-none focus:border-emerald-700"
+                className="min-w-0 flex-1 rounded-md border border-ink-700 bg-ink-950 px-2 py-1 outline-none transition focus:border-brass-600/70 focus:bg-ink-900"
               />
               <button
                 type="button"
-                className={toolbarBtn + ' !border-emerald-700 !text-emerald-400'}
+                className="brand-button rounded-md px-2.5 py-1 text-[11px] font-semibold"
                 onClick={createGroupFromSelection}
               >
                 {t('create')}
               </button>
-              <button type="button" className={toolbarBtn} onClick={() => setGroupTitleInput(null)}>
+              <button type="button" className={bulkBtn} onClick={() => setGroupTitleInput(null)}>
                 {t('cancel')}
               </button>
             </>
@@ -589,9 +617,15 @@ export default function App() {
       )}
 
       {/* 底部状态 */}
-      <footer className="flex items-center justify-between border-t border-neutral-800 px-3 py-1.5 text-[11px] text-neutral-500">
-        <span>{t('tabCount', { count: tabs.length })}</span>
-        {status && <span className={status.bad ? 'text-red-400' : 'text-emerald-400'}>{status.text}</span>}
+      <footer className="flex items-center justify-between gap-2 border-t border-ink-700 bg-ink-900/60 px-3 py-2 text-[11px] text-neutral-500">
+        <span className="shrink-0 font-mono text-neutral-600">
+          {t('tabCount', { count: tabs.length })}
+        </span>
+        {status && (
+          <span className="min-w-0 truncate text-right">
+            <span className={status.bad ? 'text-red-300' : 'text-mint-300'}>{status.text}</span>
+          </span>
+        )}
       </footer>
 
       {showSnapshotModal && (
