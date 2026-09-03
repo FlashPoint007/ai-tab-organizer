@@ -30,4 +30,10 @@ export default defineConfig({
   vite: () => ({
     plugins: [tailwindcss()],
   }),
+  hooks: {
+    // 让设置页作为完整新标签页打开（而非在 chrome://extensions 内嵌展示）
+    'build:manifestGenerated': (_wxt, manifest) => {
+      if (manifest.options_ui) manifest.options_ui.open_in_tab = true;
+    },
+  },
 });

@@ -14,10 +14,41 @@ import { findPreset, LLM_PRESETS, originFromBaseUrl } from '@/lib/llm/presets';
 
 type RuleMatchType = DomainRule['matchType'];
 
-const btn =
-  'rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-1 text-xs text-neutral-300 transition hover:border-neutral-600 hover:text-white disabled:opacity-40 disabled:hover:border-neutral-800 disabled:hover:text-neutral-300';
+type SectionId = 'model' | 'automation' | 'categories' | 'rules' | 'backup';
+
+const SECTIONS: Array<{ id: SectionId; title: string; subtitle: string }> = [
+  {
+    id: 'model',
+    title: 'AI 模型',
+    subtitle:
+      '任意 OpenAI 兼容端点均可（含本机 Ollama / LM Studio）。保存时会按域名请求访问授权，API Key 只保存在本地浏览器中，不会上传。',
+  },
+  {
+    id: 'automation',
+    title: '自动整理与界面',
+    subtitle: '自动触发器、折叠组名、成组门槛与界面语言。修改即生效。',
+  },
+  {
+    id: 'categories',
+    title: '分类管理',
+    subtitle: '这份类别清单同时约束规则引擎与 AI 分类输出；AI 对没把握的标签会跳过并回落到规则。',
+  },
+  {
+    id: 'rules',
+    title: '分组规则',
+    subtitle: '从上到下依次匹配，先命中先生效；域名规则匹配主域及全部子域，关键词规则匹配标题或网址的子串。',
+  },
+  {
+    id: 'backup',
+    title: '备份与恢复',
+    subtitle: '导出分组规则、分类清单、AI 模型配置与界面偏好（不含快照与分类缓存）。',
+  },
+];
+
 const input =
-  'rounded-md border border-neutral-800 bg-neutral-950 px-2.5 py-1.5 text-sm outline-none placeholder:text-neutral-600 focus:border-emerald-700';
+  'rounded-md border border-ink-700 bg-ink-950 px-2.5 py-1.5 text-sm text-neutral-100 outline-none transition placeholder:text-neutral-600 focus:border-brass-500/70 focus:bg-ink-900';
+const btn =
+  'rounded-md border border-ink-700 bg-ink-900 px-2.5 py-1 text-xs text-neutral-300 transition hover:border-brass-500/60 hover:text-neutral-100 disabled:opacity-40 disabled:hover:border-ink-700 disabled:hover:text-neutral-300';
 
 interface LlmFormState {
   preset: string;
@@ -37,6 +68,9 @@ export default function App() {
     category: '',
   });
   const [error, setError] = useState<string | null>(null);
+
+  // 一页式布局：当前激活的分区
+  const [activeSection, setActiveSection] = useState<SectionId>('model');
 
   // M4：自动化与界面
   const [uiLanguage, setUiLanguage] = useState<UiLanguage>('zh');
@@ -413,498 +447,513 @@ export default function App() {
 
   const activePreset = findPreset(llm?.preset ?? '');
   const showApiKey = activePreset?.needsApiKey ?? true;
+  const activeMeta = SECTIONS.find((s) => s.id === activeSection) ?? SECTIONS[0]!;
+
+  const navItem = (active: boolean): string =>
+    'block w-full rounded-md px-3 py-2 text-left text-[13px] font-medium transition ' +
+    (active ? 'bg-ink-800 text-brass-300 shadow-inner' : 'text-neutral-400 hover:bg-ink-850 hover:text-neutral-100');
 
   return (
-    <main className="mx-auto min-h-screen max-w-2xl bg-neutral-950 p-6 pb-16 text-neutral-100">
-      <h1 className="text-xl font-semibold tracking-tight">AI Tab Organizer · 设置</h1>
-      <p className="mt-1 text-sm text-neutral-400">
-        M3：AI 自动分类已接入。规则引擎（M2）继续作为离线兜底。
-      </p>
-
-      {error && (
-        <div className="mt-4 flex items-start gap-2 rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-2 text-sm text-red-300">
-          <span className="flex-1">{error}</span>
-          <button type="button" className="text-red-400 hover:text-red-200" onClick={() => setError(null)}>
-            ×
-          </button>
+    <div className="flex h-screen bg-ink-950 text-neutral-100">
+      {/* 左侧导航 */}
+      <aside className="flex w-60 shrink-0 flex-col border-r border-ink-700 bg-ink-900/50">
+        <div className="flex items-center gap-2 px-3 pb-3 pt-3">
+          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-brass-300 to-brass-600 text-[11px] font-bold text-ink-950 shadow-sm">
+            ◈
+          </span>
+          <span className="text-[13px] font-semibold tracking-tight text-neutral-100">
+            AI Tab Organizer
+          </span>
         </div>
-      )}
+        <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-2">
+          {SECTIONS.map((s) => (
+            <button key={s.id} type="button" className={navItem(activeSection === s.id)} onClick={() => setActiveSection(s.id)}>
+              {s.title}
+            </button>
+          ))}
+        </nav>
+        <div className="border-t border-ink-700 px-3 py-2 text-[11px] text-neutral-500">v0.1.0</div>
+      </aside>
 
-      {/* AI 模型配置 */}
-      <section className="mt-6">
-        <h2 className="text-base font-semibold">AI 模型</h2>
-        <p className="mt-1 text-xs leading-relaxed text-neutral-500">
-          任意 OpenAI 兼容端点均可（含本机 Ollama / LM Studio）。保存时会按域名请求访问授权，
-          API Key 只保存在本地浏览器中，不会上传。
-        </p>
+      {/* 主内容区 */}
+      <main className="flex min-w-0 flex-1 flex-col">
+        <header className="border-b border-ink-700 px-6 py-4">
+          <h1 className="text-base font-semibold tracking-tight text-neutral-100">{activeMeta.title}</h1>
+          <p className="mt-1 max-w-2xl text-xs leading-relaxed text-neutral-500">{activeMeta.subtitle}</p>
+        </header>
 
-        <div className="mt-3 space-y-2">
-          <div className="flex items-center gap-2">
-            <label className="w-20 shrink-0 text-xs text-neutral-500">服务商</label>
-            <select
-              value={llm?.preset ?? 'deepseek'}
-              onChange={(e) => applyPreset(e.target.value)}
-              className={input + ' w-52'}
-            >
-              {LLM_PRESETS.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <label className="w-20 shrink-0 text-xs text-neutral-500">Base URL</label>
-            <input
-              value={llm?.baseUrl ?? ''}
-              onChange={(e) => setLlm((prev) => (prev ? { ...prev, baseUrl: e.target.value } : prev))}
-              placeholder="https://api.deepseek.com/v1"
-              className={input + ' min-w-0 flex-1'}
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <label className="w-20 shrink-0 text-xs text-neutral-500">模型</label>
-            <input
-              value={llm?.model ?? ''}
-              onChange={(e) => setLlm((prev) => (prev ? { ...prev, model: e.target.value } : prev))}
-              placeholder="deepseek-chat"
-              className={input + ' min-w-0 flex-1'}
-            />
-            {!showApiKey && <span className="shrink-0 text-[11px] text-neutral-600">本地服务无需 Key</span>}
-          </div>
-
-          {showApiKey && (
-            <div className="flex items-center gap-2">
-              <label className="w-20 shrink-0 text-xs text-neutral-500">API Key</label>
-              <input
-                type="password"
-                value={llm?.apiKey ?? ''}
-                onChange={(e) => setLlm((prev) => (prev ? { ...prev, apiKey: e.target.value } : prev))}
-                placeholder="sk-…（仅存本地）"
-                className={input + ' min-w-0 flex-1'}
-              />
-              <input
-                value={llm?.temperature ?? ''}
-                onChange={(e) => setLlm((prev) => (prev ? { ...prev, temperature: e.target.value } : prev))}
-                placeholder="温度 0"
-                className={input + ' w-24'}
-              />
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+          {error && (
+            <div className="mb-5 flex max-w-2xl items-start gap-2 rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-2 text-sm text-red-300">
+              <span className="flex-1">{error}</span>
+              <button type="button" className="text-red-400 hover:text-red-200" onClick={() => setError(null)}>
+                ×
+              </button>
             </div>
           )}
 
-          {activePreset?.hint && <p className="pl-[5.5rem] text-[11px] text-neutral-500">💡 {activePreset.hint}</p>}
+          {/* AI 模型配置 */}
+          {activeSection === 'model' && (
+            <section className="max-w-2xl">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <label className="w-24 shrink-0 text-xs text-neutral-500">服务商</label>
+                  <select
+                    value={llm?.preset ?? 'deepseek'}
+                    onChange={(e) => applyPreset(e.target.value)}
+                    className={input + ' w-52'}
+                  >
+                    {LLM_PRESETS.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-          <div className="flex items-center gap-2 pt-1">
-            <button
-              type="button"
-              className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-600"
-              onClick={() => void handleSaveLlm()}
-            >
-              授权并保存
-            </button>
-            <button type="button" className={btn} disabled={testing} onClick={() => void handleTestLlm()}>
-              {testing ? '测试中…' : '测试连接'}
-            </button>
-            {testResult && (
-              <span className={'text-xs ' + (testResult.ok ? 'text-emerald-400' : 'text-red-400')}>
-                {testResult.text}
-              </span>
-            )}
-            {!testResult && savedAt && <span className="text-xs text-emerald-400">已保存于 {savedAt}</span>}
-          </div>
+                <div className="flex items-center gap-2">
+                  <label className="w-24 shrink-0 text-xs text-neutral-500">Base URL</label>
+                  <input
+                    value={llm?.baseUrl ?? ''}
+                    onChange={(e) => setLlm((prev) => (prev ? { ...prev, baseUrl: e.target.value } : prev))}
+                    placeholder="https://api.deepseek.com/v1"
+                    className={input + ' min-w-0 flex-1'}
+                  />
+                </div>
 
-          <div className="pt-1">
-            <button
-              type="button"
-              className="text-[11px] text-neutral-500 underline decoration-dotted hover:text-amber-400"
-              title="分类结果有缓存：改了分类策略或想让 AI 重新细分时，先清缓存再整理"
-              onClick={() => {
-                void (async () => {
-                  try {
-                    await sendRequest({ type: 'clearCategoryCache' });
-                    setError(null);
-                  } catch (e) {
-                    fail(e);
-                  }
-                })();
-              }}
-            >
-              清空 AI 分类缓存（下次整理将全部重新分类）
-            </button>
-          </div>
+                <div className="flex items-center gap-2">
+                  <label className="w-24 shrink-0 text-xs text-neutral-500">模型</label>
+                  <input
+                    value={llm?.model ?? ''}
+                    onChange={(e) => setLlm((prev) => (prev ? { ...prev, model: e.target.value } : prev))}
+                    placeholder="deepseek-chat"
+                    className={input + ' min-w-0 flex-1'}
+                  />
+                  {!showApiKey && <span className="shrink-0 text-[11px] text-neutral-600">本地服务无需 Key</span>}
+                </div>
 
-          {usage && (
-            <p className="pt-1 text-[11px] text-neutral-500">
-              用量统计：请求 {usage.requests} 次 · 累计 {usage.totalTokens} tokens · 降级批次{' '}
-              {usage.degradedBatches}
-              <button
-                type="button"
-                className="ml-2 underline decoration-dotted hover:text-neutral-300"
-                onClick={() => {
-                  void (async () => {
-                    try {
-                      await sendRequest({ type: 'clearLlmUsage' });
-                      setUsage({ requests: 0, totalTokens: 0, degradedBatches: 0 });
-                    } catch (e) {
-                      fail(e);
-                    }
-                  })();
-                }}
-              >
-                清零
-              </button>
-            </p>
+                {showApiKey && (
+                  <div className="flex items-center gap-2">
+                    <label className="w-24 shrink-0 text-xs text-neutral-500">API Key</label>
+                    <input
+                      type="password"
+                      value={llm?.apiKey ?? ''}
+                      onChange={(e) => setLlm((prev) => (prev ? { ...prev, apiKey: e.target.value } : prev))}
+                      placeholder="sk-…（仅存本地）"
+                      className={input + ' min-w-0 flex-1'}
+                    />
+                    <input
+                      value={llm?.temperature ?? ''}
+                      onChange={(e) => setLlm((prev) => (prev ? { ...prev, temperature: e.target.value } : prev))}
+                      placeholder="温度 0"
+                      className={input + ' w-24'}
+                    />
+                  </div>
+                )}
+
+                {activePreset?.hint && <p className="pl-[5.5rem] text-[11px] text-neutral-500">💡 {activePreset.hint}</p>}
+
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    className="brand-button rounded-md px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed"
+                    onClick={() => void handleSaveLlm()}
+                  >
+                    授权并保存
+                  </button>
+                  <button type="button" className={btn} disabled={testing} onClick={() => void handleTestLlm()}>
+                    {testing ? '测试中…' : '测试连接'}
+                  </button>
+                  {testResult && (
+                    <span className={'text-xs ' + (testResult.ok ? 'text-mint-300' : 'text-red-300')}>
+                      {testResult.text}
+                    </span>
+                  )}
+                  {!testResult && savedAt && <span className="text-xs text-mint-300">已保存于 {savedAt}</span>}
+                </div>
+
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    className="text-[11px] text-neutral-500 underline decoration-dotted hover:text-brass-400"
+                    title="分类结果有缓存：改了分类策略或想让 AI 重新细分时，先清缓存再整理"
+                    onClick={() => {
+                      void (async () => {
+                        try {
+                          await sendRequest({ type: 'clearCategoryCache' });
+                          setError(null);
+                        } catch (e) {
+                          fail(e);
+                        }
+                      })();
+                    }}
+                  >
+                    清空 AI 分类缓存（下次整理将全部重新分类）
+                  </button>
+                </div>
+
+                {usage && (
+                  <p className="pt-1 text-[11px] text-neutral-500">
+                    用量统计：请求 {usage.requests} 次 · 累计 {usage.totalTokens} tokens · 降级批次{' '}
+                    {usage.degradedBatches}
+                    <button
+                      type="button"
+                      className="ml-2 underline decoration-dotted hover:text-neutral-300"
+                      onClick={() => {
+                        void (async () => {
+                          try {
+                            await sendRequest({ type: 'clearLlmUsage' });
+                            setUsage({ requests: 0, totalTokens: 0, degradedBatches: 0 });
+                          } catch (e) {
+                            fail(e);
+                          }
+                        })();
+                      }}
+                    >
+                      清零
+                    </button>
+                  </p>
+                )}
+              </div>
+            </section>
           )}
-        </div>
-      </section>
 
-      {/* 自动整理与界面 */}
-      <section className="mt-8">
-        <h2 className="text-base font-semibold">自动整理与界面</h2>
+          {/* 自动整理与界面 */}
+          {activeSection === 'automation' && (
+            <section className="max-w-2xl">
+              <div className="flex items-center gap-2">
+                <label className="w-28 shrink-0 text-xs text-neutral-500">界面语言 / Language</label>
+                <select
+                  value={uiLanguage}
+                  onChange={(e) => {
+                    const language = e.target.value as UiLanguage;
+                    setUiLanguage(language);
+                    void saveUi({ language });
+                  }}
+                  className={input + ' w-32'}
+                >
+                  <option value="zh">中文</option>
+                  <option value="en">English</option>
+                </select>
+              </div>
 
-        <div className="mt-3 flex items-center gap-2">
-          <label className="w-24 shrink-0 text-xs text-neutral-500">界面语言 / Language</label>
-          <select
-            value={uiLanguage}
-            onChange={(e) => {
-              const language = e.target.value as UiLanguage;
-              setUiLanguage(language);
-              void saveUi({ language });
-            }}
-            className={input + ' w-32'}
-          >
-            <option value="zh">中文</option>
-            <option value="en">English</option>
-          </select>
-        </div>
+              <div className="mt-3 flex items-center gap-2">
+                <label className="w-28 shrink-0 text-xs text-neutral-500">AI 整理确认</label>
+                <label className="flex items-center gap-1.5 text-xs text-neutral-300">
+                  <input
+                    type="checkbox"
+                    className="accent-brass-500"
+                    checked={autoApplyState}
+                    onChange={(e) => {
+                      const autoApply = e.target.checked;
+                      setAutoApplyState(autoApply);
+                      void saveUi({ autoApply });
+                    }}
+                  />
+                  直接生效，跳过预览确认
+                </label>
+              </div>
 
-        <div className="mt-3 flex items-center gap-2">
-          <label className="w-24 shrink-0 text-xs text-neutral-500">AI 整理确认</label>
-          <label className="flex items-center gap-1.5 text-xs text-neutral-300">
-            <input
-              type="checkbox"
-              className="accent-emerald-600"
-              checked={autoApplyState}
-              onChange={(e) => {
-                const autoApply = e.target.checked;
-                setAutoApplyState(autoApply);
-                void saveUi({ autoApply });
-              }}
-            />
-            直接生效，跳过预览确认
-          </label>
-        </div>
+              <div className="mt-3 flex items-center gap-2">
+                <label className="w-28 shrink-0 text-xs text-neutral-500">实时归类</label>
+                <label className="flex items-center gap-1.5 text-xs text-neutral-300">
+                  <input
+                    type="checkbox"
+                    className="accent-brass-500"
+                    checked={realtimeState}
+                    onChange={(e) => {
+                      const realtime = e.target.checked;
+                      setRealtimeState(realtime);
+                      void saveUi({ realtime });
+                    }}
+                  />
+                  新标签打开后自动归类入组（缓存/规则优先，必要时单条 AI 请求）
+                </label>
+              </div>
 
-        <div className="mt-3 flex items-center gap-2">
-          <label className="w-24 shrink-0 text-xs text-neutral-500">实时归类</label>
-          <label className="flex items-center gap-1.5 text-xs text-neutral-300">
-            <input
-              type="checkbox"
-              className="accent-emerald-600"
-              checked={realtimeState}
-              onChange={(e) => {
-                const realtime = e.target.checked;
-                setRealtimeState(realtime);
-                void saveUi({ realtime });
-              }}
-            />
-            新标签打开后自动归类入组（缓存/规则优先，必要时单条 AI 请求）
-          </label>
-        </div>
+              <div className="mt-3 flex items-center gap-2">
+                <label className="w-28 shrink-0 text-xs text-neutral-500">折叠组名</label>
+                <select
+                  value={collapsedMode}
+                  onChange={(e) => {
+                    const collapsedTitleMode = e.target.value as CollapsedTitleMode;
+                    setCollapsedMode(collapsedTitleMode);
+                    void saveUi({ collapsedTitleMode });
+                  }}
+                  className={input + ' w-64'}
+                >
+                  <option value="abbreviate">缩写（窄色块，悬停显示缩写）</option>
+                  <option value="hide">隐藏（只剩色点，悬停显示「未命名的组」）</option>
+                  <option value="keep">保留全名（悬停信息完整，但占标签栏宽度）</option>
+                </select>
+                <span className="text-[11px] text-neutral-600">
+                  Chrome 折叠组的宽度与悬停提示共用组名字段，只能三者取一；切换后立即生效
+                </span>
+              </div>
 
-        <div className="mt-3 flex items-center gap-2">
-          <label className="w-24 shrink-0 text-xs text-neutral-500">折叠组名</label>
-          <select
-            value={collapsedMode}
-            onChange={(e) => {
-              const collapsedTitleMode = e.target.value as CollapsedTitleMode;
-              setCollapsedMode(collapsedTitleMode);
-              void saveUi({ collapsedTitleMode });
-            }}
-            className={input + ' w-64'}
-          >
-            <option value="abbreviate">缩写（窄色块，悬停显示缩写）</option>
-            <option value="hide">隐藏（只剩色点，悬停显示「未命名的组」）</option>
-            <option value="keep">保留全名（悬停信息完整，但占标签栏宽度）</option>
-          </select>
-          <span className="text-[11px] text-neutral-600">
-            Chrome 折叠组的宽度与悬停提示共用组名字段，只能三者取一；切换后立即生效
-          </span>
-        </div>
+              <div className="mt-3 flex items-center gap-2">
+                <label className="w-28 shrink-0 text-xs text-neutral-500">成组门槛</label>
+                <input
+                  type="number"
+                  min={2}
+                  max={50}
+                  value={minGroupSize}
+                  onChange={(e) => {
+                    const minGroupSizeForRules = Math.max(2, Number(e.target.value) || 2);
+                    setMinGroupSize(minGroupSizeForRules);
+                    void saveUi({ minGroupSizeForRules });
+                  }}
+                  className={input + ' w-28'}
+                />
+                <span className="text-[11px] text-neutral-600">
+                  同类别标签数达到该值才建 Chrome 标签组（2 = 单标签不建组，避免标签栏拥挤）
+                </span>
+              </div>
 
-        <div className="mt-3 flex items-center gap-2">
-          <label className="w-24 shrink-0 text-xs text-neutral-500">成组门槛</label>
-          <input
-            type="number"
-            min={2}
-            max={50}
-            value={minGroupSize}
-            onChange={(e) => {
-              const minGroupSizeForRules = Math.max(2, Number(e.target.value) || 2);
-              setMinGroupSize(minGroupSizeForRules);
-              void saveUi({ minGroupSizeForRules });
-            }}
-            className={input + ' w-28'}
-          />
-          <span className="text-[11px] text-neutral-600">
-            同类别标签数达到该值才建 Chrome 标签组（2 = 单标签不建组，避免标签栏拥挤）
-          </span>
-        </div>
-
-        <div className="mt-3 flex items-center gap-2">
-          <label className="w-24 shrink-0 text-xs text-neutral-500">自动触发</label>
-          <select
-            value={autoOrganize.mode}
-            onChange={(e) => {
-              const mode = e.target.value as AutoOrganizeConfig['mode'];
-              const next = { ...autoOrganize, mode };
-              setAutoOrganize(next);
-              void saveUi({ autoOrganize: next });
-            }}
-            className={input + ' w-56'}
-          >
-            <option value="off">关闭（仅手动/快捷键）</option>
-            <option value="interval">定时整理</option>
-            <option value="threshold">未分组达到阈值</option>
-          </select>
-          {autoOrganize.mode === 'interval' && (
-            <input
-              type="number"
-              min={5}
-              max={1440}
-              value={autoOrganize.intervalMinutes}
-              onChange={(e) => {
-                const intervalMinutes = Math.max(5, Number(e.target.value) || 30);
-                const next = { ...autoOrganize, intervalMinutes };
-                setAutoOrganize(next);
-                void saveUi({ autoOrganize: next });
-              }}
-              className={input + ' w-28'}
-            />
+              <div className="mt-3 flex items-center gap-2">
+                <label className="w-28 shrink-0 text-xs text-neutral-500">自动触发</label>
+                <select
+                  value={autoOrganize.mode}
+                  onChange={(e) => {
+                    const mode = e.target.value as AutoOrganizeConfig['mode'];
+                    const next = { ...autoOrganize, mode };
+                    setAutoOrganize(next);
+                    void saveUi({ autoOrganize: next });
+                  }}
+                  className={input + ' w-56'}
+                >
+                  <option value="off">关闭（仅手动/快捷键）</option>
+                  <option value="interval">定时整理</option>
+                  <option value="threshold">未分组达到阈值</option>
+                </select>
+                {autoOrganize.mode === 'interval' && (
+                  <input
+                    type="number"
+                    min={5}
+                    max={1440}
+                    value={autoOrganize.intervalMinutes}
+                    onChange={(e) => {
+                      const intervalMinutes = Math.max(5, Number(e.target.value) || 30);
+                      const next = { ...autoOrganize, intervalMinutes };
+                      setAutoOrganize(next);
+                      void saveUi({ autoOrganize: next });
+                    }}
+                    className={input + ' w-28'}
+                  />
+                )}
+                {autoOrganize.mode === 'threshold' && (
+                  <input
+                    type="number"
+                    min={2}
+                    max={200}
+                    value={autoOrganize.thresholdCount}
+                    onChange={(e) => {
+                      const thresholdCount = Math.max(2, Number(e.target.value) || 8);
+                      const next = { ...autoOrganize, thresholdCount };
+                      setAutoOrganize(next);
+                      void saveUi({ autoOrganize: next });
+                    }}
+                    className={input + ' w-28'}
+                  />
+                )}
+              </div>
+              <p className="mt-2 pl-[7.5rem] text-[11px] text-neutral-600">
+                快捷键 Alt+Shift+O 随时可用（chrome://extensions/shortcuts 可改键）；自动触发仅在已配置 AI 模型时生效。
+              </p>
+            </section>
           )}
-          {autoOrganize.mode === 'threshold' && (
-            <input
-              type="number"
-              min={2}
-              max={200}
-              value={autoOrganize.thresholdCount}
-              onChange={(e) => {
-                const thresholdCount = Math.max(2, Number(e.target.value) || 8);
-                const next = { ...autoOrganize, thresholdCount };
-                setAutoOrganize(next);
-                void saveUi({ autoOrganize: next });
-              }}
-              className={input + ' w-28'}
-            />
-          )}
-        </div>
-        <p className="mt-2 pl-[6.5rem] text-[11px] text-neutral-600">
-          快捷键 Alt+Shift+O 随时可用（chrome://extensions/shortcuts 可改键）；自动触发仅在已配置 AI 模型时生效。
-        </p>
-      </section>
 
-      {/* 分类管理 */}
-      <section className="mt-8">
-        <h2 className="text-base font-semibold">分类管理</h2>
-        <p className="mt-1 text-xs text-neutral-500">
-          这份类别清单同时约束规则引擎与 AI 分类输出；AI 对没把握的标签会跳过并回落到规则。
-        </p>
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {(categories ?? []).map((name) => {
-            const used = usageCount.get(name) ?? 0;
-            return (
-              <span
-                key={name}
-                title={used > 0 ? '被 ' + used + ' 条规则引用，不能删除' : '点击 × 删除'}
-                className="flex items-center gap-1 rounded-full border border-neutral-700 bg-neutral-900 py-1 pl-3 pr-1.5 text-xs"
-              >
-                {name}
-                {used > 0 && <span className="text-[10px] text-neutral-500">×{used}</span>}
-                <button
-                  type="button"
-                  disabled={used > 0}
-                  onClick={() => removeCategory(name)}
-                  className="rounded-full px-1.5 text-neutral-500 hover:bg-neutral-800 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-30"
-                >
-                  ×
-                </button>
-              </span>
-            );
-          })}
-        </div>
-        <div className="mt-2 flex gap-2">
-          <input
-            value={newCategory}
-            onChange={(e) => setNewCategory(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') addCategory();
-            }}
-            placeholder="新增分类名称"
-            className={input + ' w-56'}
-          />
-          <button type="button" className={btn} onClick={addCategory}>
-            添加分类
-          </button>
-        </div>
-      </section>
-
-      {/* 规则编辑器 */}
-      <section className="mt-8">
-        <h2 className="text-base font-semibold">分组规则</h2>
-        <p className="mt-1 text-xs leading-relaxed text-neutral-500">
-          从上到下依次匹配，先命中先生效（可用 ↑↓ 调整优先级）。
-          域名规则匹配主域及其全部子域；关键词规则匹配标题或网址的子串。
-          「按类别分组」与 AI 整理的兜底都使用这里的规则。
-        </p>
-
-        <ul className="mt-3 space-y-2">
-          {(rules ?? []).map((rule, i) => (
-            <li
-              key={rule.id}
-              className={
-                'flex items-center gap-2 rounded-lg border p-2.5 ' +
-                (rule.enabled
-                  ? 'border-neutral-800 bg-neutral-900'
-                  : 'border-neutral-800/60 bg-neutral-900/40 opacity-60')
-              }
-            >
-              <input
-                type="checkbox"
-                className="accent-emerald-600"
-                checked={rule.enabled}
-                title={rule.enabled ? '点击禁用' : '点击启用'}
-                onChange={() =>
-                  void saveRules((rules ?? []).map((rr) => (rr.id === rule.id ? { ...rr, enabled: !rr.enabled } : rr)))
-                }
-              />
-              <span className="w-14 shrink-0 rounded bg-neutral-800 px-1.5 py-0.5 text-center text-[10px] text-neutral-400">
-                {rule.matchType === 'domain' ? '域名' : '关键词'}
-              </span>
-              <span className="min-w-0 flex-1 truncate text-sm text-neutral-200" title={rule.pattern}>
-                {rule.pattern}
-              </span>
-              <span className="shrink-0 text-xs text-neutral-500">→</span>
-              <select
-                value={rule.category}
-                onChange={(e) => {
-                  const category = e.target.value;
-                  if (!category) return;
-                  void saveRules((rules ?? []).map((rr) => (rr.id === rule.id ? { ...rr, category } : rr)));
-                }}
-                className="w-28 shrink-0 rounded border border-neutral-700 bg-neutral-950 px-1.5 py-1 text-xs outline-none focus:border-emerald-700"
-              >
-                {[...new Set([rule.category, ...(categories ?? [])])].map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-              <div className="flex shrink-0 items-center">
-                <button
-                  type="button"
-                  className={btn + ' !px-1.5'}
-                  disabled={i === 0}
-                  onClick={() => moveRule(i, -1)}
-                  title="上移（提高优先级）"
-                >
-                  ↑
-                </button>
-                <button
-                  type="button"
-                  className={btn + ' !px-1.5'}
-                  disabled={!rules || i >= rules.length - 1}
-                  onClick={() => moveRule(i, 1)}
-                  title="下移（降低优先级）"
-                >
-                  ↓
-                </button>
-                <button
-                  type="button"
-                  className={btn + ' hover:!text-red-400'}
-                  onClick={() => void saveRules((rules ?? []).filter((rr) => rr.id !== rule.id))}
-                >
-                  删除
+          {/* 分类管理 */}
+          {activeSection === 'categories' && (
+            <section className="max-w-2xl">
+              <div className="flex flex-wrap gap-1.5">
+                {(categories ?? []).map((name) => {
+                  const used = usageCount.get(name) ?? 0;
+                  return (
+                    <span
+                      key={name}
+                      title={used > 0 ? '被 ' + used + ' 条规则引用，不能删除' : '点击 × 删除'}
+                      className="flex items-center gap-1 rounded-full border border-ink-700 bg-ink-900 py-1 pl-3 pr-1.5 text-xs"
+                    >
+                      {name}
+                      {used > 0 && <span className="text-[10px] text-neutral-500">×{used}</span>}
+                      <button
+                        type="button"
+                        disabled={used > 0}
+                        onClick={() => removeCategory(name)}
+                        className="rounded-full px-1.5 text-neutral-500 transition hover:bg-ink-800 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-30"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+              <div className="mt-2 flex gap-2">
+                <input
+                  value={newCategory}
+                  onChange={(e) => setNewCategory(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') addCategory();
+                  }}
+                  placeholder="新增分类名称"
+                  className={input + ' w-56'}
+                />
+                <button type="button" className={btn} onClick={addCategory}>
+                  添加分类
                 </button>
               </div>
-            </li>
-          ))}
-        </ul>
+            </section>
+          )}
 
-        {/* 新增规则 */}
-        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-neutral-800 p-3">
-          <select
-            value={draft.matchType}
-            onChange={(e) => setDraft({ ...draft, matchType: e.target.value as RuleMatchType })}
-            className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-xs outline-none focus:border-emerald-700"
-          >
-            <option value="domain">域名</option>
-            <option value="keyword">关键词</option>
-          </select>
-          <input
-            value={draft.pattern}
-            onChange={(e) => setDraft({ ...draft, pattern: e.target.value })}
-            placeholder={draft.matchType === 'domain' ? '如 github.com' : '如 论文、arxiv'}
-            className={input + ' min-w-0 flex-1'}
-          />
-          <span className="text-xs text-neutral-500">→</span>
-          <input
-            value={draft.category}
-            onChange={(e) => setDraft({ ...draft, category: e.target.value })}
-            list="category-options"
-            placeholder="类别"
-            className={input + ' w-32'}
-          />
-          <datalist id="category-options">
-            {(categories ?? []).map((c) => (
-              <option key={c} value={c} />
-            ))}
-          </datalist>
-          <button type="button" className={btn + ' !border-emerald-700 !text-emerald-400'} onClick={addRule}>
-            添加规则
-          </button>
+          {/* 规则编辑器 */}
+          {activeSection === 'rules' && (
+            <section className="max-w-2xl">
+              <ul className="space-y-2">
+                {(rules ?? []).map((rule, i) => (
+                  <li
+                    key={rule.id}
+                    className={
+                      'flex items-center gap-2 rounded-lg border p-2.5 ' +
+                      (rule.enabled
+                        ? 'border-ink-700 bg-ink-900'
+                        : 'border-ink-700/60 bg-ink-900/40 opacity-60')
+                    }
+                  >
+                    <input
+                      type="checkbox"
+                      className="accent-brass-500"
+                      checked={rule.enabled}
+                      title={rule.enabled ? '点击禁用' : '点击启用'}
+                      onChange={() =>
+                        void saveRules((rules ?? []).map((rr) => (rr.id === rule.id ? { ...rr, enabled: !rr.enabled } : rr)))
+                      }
+                    />
+                    <span className="w-14 shrink-0 rounded bg-ink-800 px-1.5 py-0.5 text-center text-[10px] text-neutral-400">
+                      {rule.matchType === 'domain' ? '域名' : '关键词'}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-sm text-neutral-200" title={rule.pattern}>
+                      {rule.pattern}
+                    </span>
+                    <span className="shrink-0 text-xs text-neutral-500">→</span>
+                    <select
+                      value={rule.category}
+                      onChange={(e) => {
+                        const category = e.target.value;
+                        if (!category) return;
+                        void saveRules((rules ?? []).map((rr) => (rr.id === rule.id ? { ...rr, category } : rr)));
+                      }}
+                      className="w-28 shrink-0 rounded-md border border-ink-700 bg-ink-950 px-1.5 py-1 text-xs outline-none transition focus:border-brass-500/70"
+                    >
+                      {[...new Set([rule.category, ...(categories ?? [])])].map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="flex shrink-0 items-center">
+                      <button
+                        type="button"
+                        className={btn + ' !px-1.5'}
+                        disabled={i === 0}
+                        onClick={() => moveRule(i, -1)}
+                        title="上移（提高优先级）"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        className={btn + ' !px-1.5'}
+                        disabled={!rules || i >= rules.length - 1}
+                        onClick={() => moveRule(i, 1)}
+                        title="下移（降低优先级）"
+                      >
+                        ↓
+                      </button>
+                      <button
+                        type="button"
+                        className={btn + ' hover:!text-red-300'}
+                        onClick={() => void saveRules((rules ?? []).filter((rr) => rr.id !== rule.id))}
+                      >
+                        删除
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+
+              {/* 新增规则 */}
+              <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-ink-700 p-3">
+                <select
+                  value={draft.matchType}
+                  onChange={(e) => setDraft({ ...draft, matchType: e.target.value as RuleMatchType })}
+                  className="rounded-md border border-ink-700 bg-ink-950 px-2 py-1.5 text-xs outline-none transition focus:border-brass-500/70"
+                >
+                  <option value="domain">域名</option>
+                  <option value="keyword">关键词</option>
+                </select>
+                <input
+                  value={draft.pattern}
+                  onChange={(e) => setDraft({ ...draft, pattern: e.target.value })}
+                  placeholder={draft.matchType === 'domain' ? '如 github.com' : '如 论文、arxiv'}
+                  className={input + ' min-w-0 flex-1'}
+                />
+                <span className="text-xs text-neutral-500">→</span>
+                <input
+                  value={draft.category}
+                  onChange={(e) => setDraft({ ...draft, category: e.target.value })}
+                  list="category-options"
+                  placeholder="类别"
+                  className={input + ' w-32'}
+                />
+                <datalist id="category-options">
+                  {(categories ?? []).map((c) => (
+                    <option key={c} value={c} />
+                  ))}
+                </datalist>
+                <button type="button" className={btn + ' !border-brass-500/60 !text-brass-300'} onClick={addRule}>
+                  添加规则
+                </button>
+              </div>
+            </section>
+          )}
+
+          {/* 备份与恢复 */}
+          {activeSection === 'backup' && (
+            <section className="max-w-2xl">
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="flex items-center gap-1.5 text-xs text-neutral-300">
+                  <input
+                    type="checkbox"
+                    className="accent-brass-500"
+                    checked={exportIncludeKey}
+                    onChange={(e) => setExportIncludeKey(e.target.checked)}
+                  />
+                  导出时包含 API Key（含敏感信息，慎选）
+                </label>
+                <button type="button" className={btn} onClick={handleExport}>
+                  导出备份
+                </button>
+                <button type="button" className={btn} onClick={() => importFileRef.current?.click()}>
+                  导入备份
+                </button>
+                <input
+                  ref={importFileRef}
+                  type="file"
+                  accept="application/json,.json"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = '';
+                    if (file) void handleImport(file);
+                  }}
+                />
+                {importMsg && <span className="text-xs text-mint-300">{importMsg}</span>}
+              </div>
+            </section>
+          )}
         </div>
-      </section>
-
-      {/* 备份与恢复 */}
-      <section className="mt-8">
-        <h2 className="text-base font-semibold">备份与恢复</h2>
-        <p className="mt-1 text-xs leading-relaxed text-neutral-500">
-          导出内容：分组规则、分类清单、AI 模型配置与界面偏好（不含快照与分类缓存）。
-          导入按「文件里有什么就恢复什么」，其余保持不变。
-        </p>
-
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-1.5 text-xs text-neutral-300">
-            <input
-              type="checkbox"
-              className="accent-emerald-600"
-              checked={exportIncludeKey}
-              onChange={(e) => setExportIncludeKey(e.target.checked)}
-            />
-            导出时包含 API Key（含敏感信息，慎选）
-          </label>
-          <button type="button" className={btn} onClick={handleExport}>
-            导出备份
-          </button>
-          <button type="button" className={btn} onClick={() => importFileRef.current?.click()}>
-            导入备份
-          </button>
-          <input
-            ref={importFileRef}
-            type="file"
-            accept="application/json,.json"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              e.target.value = '';
-              if (file) void handleImport(file);
-            }}
-          />
-          {importMsg && <span className="text-xs text-emerald-400">{importMsg}</span>}
-        </div>
-      </section>
-    </main>
+      </main>
+    </div>
   );
 }
