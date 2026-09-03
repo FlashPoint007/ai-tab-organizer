@@ -1,6 +1,6 @@
 {
   "name": "ai-tab-organizer",
-  "version": "0.1.0",
+  "version": "0.7.1",
   "description": "AI-powered browser tab organizer: vertical tab management + LLM classification with custom or local models",
   "private": true,
   "type": "module",
