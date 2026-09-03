@@ -80,15 +80,18 @@ export function PreviewModal({ plan, tabs, categories, t, onCancel, onApplied, o
   }
 
   const selectCls =
-    'shrink-0 rounded border border-neutral-700 bg-neutral-950 px-1.5 py-1 text-xs outline-none focus:border-emerald-700';
+    'shrink-0 rounded-md border border-ink-700 bg-ink-950 px-1.5 py-1 text-xs outline-none transition focus:border-brass-600/70';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onCancel}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/70 p-4 backdrop-blur-sm"
+      onClick={onCancel}
+    >
       <div
-        className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-xl border border-neutral-700 bg-neutral-900 shadow-2xl"
+        className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-xl border border-ink-700 bg-ink-900 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="border-b border-neutral-800 p-4">
+        <div className="border-b border-ink-700 p-4">
           <h2 className="text-base font-semibold text-neutral-100">{t('previewTitle')}</h2>
           <p className="mt-1 text-xs leading-relaxed text-neutral-500">{t('previewHint')}</p>
           <p className="mt-1.5 text-[11px] text-neutral-600">
@@ -105,15 +108,15 @@ export function PreviewModal({ plan, tabs, categories, t, onCancel, onApplied, o
           {entries.length === 0 && <p className="py-6 text-center text-sm text-neutral-500">{t('previewNoAssignments')}</p>}
           {sections.map((section) => (
             <div key={section.category} className="mb-3">
-              <p className="px-1 pb-1 text-[11px] font-medium uppercase tracking-wide text-neutral-500">
+              <p className="px-1 pb-1 text-[11px] font-medium uppercase tracking-wide text-brass-300/70">
                 {section.category} · {section.list.length}
               </p>
               <ul className="space-y-1">
                 {section.list.map((entry) => (
-                  <li key={entry.tabId} className="flex items-center gap-2 rounded-md bg-neutral-950 px-2 py-1.5">
+                  <li key={entry.tabId} className="flex items-center gap-2 rounded-md bg-ink-950 px-2 py-1.5">
                     <input
                       type="checkbox"
-                      className="accent-emerald-600"
+                      className="accent-brass-500"
                       checked={entry.included}
                       onChange={() =>
                         setEntries((prev) =>
@@ -157,25 +160,25 @@ export function PreviewModal({ plan, tabs, categories, t, onCancel, onApplied, o
           ))}
         </div>
 
-        <div className="flex items-center gap-2 border-t border-neutral-800 p-3">
+        <div className="flex items-center gap-2 border-t border-ink-700 p-3">
           <label
             className="mr-auto flex items-center gap-1.5 text-[11px] text-neutral-400"
             title={t('learnCheckbox')}
           >
             <input
               type="checkbox"
-              className="accent-emerald-600"
+              className="accent-brass-500"
               checked={learn}
               onChange={(e) => setLearn(e.target.checked)}
             />
             {t('learnCheckbox')}
           </label>
-          <span className="text-xs text-neutral-400">
+          <span className="font-mono text-xs text-neutral-400">
             {entries.filter((e) => e.included).length}/{entries.length}
           </span>
           <button
             type="button"
-            className="rounded-md px-3 py-1.5 text-xs text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+            className="rounded-md px-3 py-1.5 text-xs text-neutral-400 transition hover:bg-ink-800 hover:text-neutral-200"
             onClick={onCancel}
           >
             {t('cancel')}
@@ -183,7 +186,7 @@ export function PreviewModal({ plan, tabs, categories, t, onCancel, onApplied, o
           <button
             type="button"
             disabled={includedCount === 0}
-            className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-600 disabled:opacity-40"
+            className="brand-button rounded-md px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed"
             onClick={confirm}
           >
             {t('applyPlan', { count: includedCount })}
